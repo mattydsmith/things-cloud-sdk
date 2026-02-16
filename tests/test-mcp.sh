@@ -122,99 +122,123 @@ check "edit ok" "$(field "$RESP" status)" "updated"
 TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "title updated" "$(field "$TASK" title)" "${PREFIX} Task (edited)"
 
-# 9. Create task with repeat
+# 9. Clear notes
+echo "--- Edit Task: Clear Notes ---"
+RESP=$(mcp_call "things_edit_task" "{\"uuid\":\"${CREATED_TASK}\",\"note\":\"none\"}" | extract_text)
+check "clear notes ok" "$(field "$RESP" status)" "updated"
+
+TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
+check "notes cleared" "$(field "$TASK" note)" ""
+
+# 10. Set area on task
+echo "--- Edit Task: Set Area ---"
+RESP=$(mcp_call "things_edit_task" "{\"uuid\":\"${CREATED_TASK}\",\"area\":\"${CREATED_AREA}\"}" | extract_text)
+check "set area ok" "$(field "$RESP" status)" "updated"
+
+TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
+check "area set" "$(field "$TASK" area_id)" "${CREATED_AREA}"
+
+# 11. Clear area
+echo "--- Edit Task: Clear Area ---"
+RESP=$(mcp_call "things_edit_task" "{\"uuid\":\"${CREATED_TASK}\",\"area\":\"none\"}" | extract_text)
+check "clear area ok" "$(field "$RESP" status)" "updated"
+
+TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
+check "area cleared" "$(field "$TASK" area_id)" ""
+
+# 12. Create task with repeat
 echo "--- Create Repeating Task ---"
 RESP=$(mcp_call "things_create_task" "{\"title\":\"${PREFIX} Repeat Daily\",\"when\":\"today\",\"repeat\":\"daily\"}" | extract_text)
 REPEAT_TASK=$(field "$RESP" uuid)
 check "repeat task created" "$([ -n "$REPEAT_TASK" ] && echo ok || echo '')" "ok"
 
-# 10. Create task with repeat after completion
+# 13. Create task with repeat after completion
 echo "--- Create Repeat After Completion ---"
 RESP=$(mcp_call "things_create_task" "{\"title\":\"${PREFIX} Repeat Weekly AC\",\"when\":\"today\",\"repeat\":\"weekly after completion\"}" | extract_text)
 REPEAT_AC_TASK=$(field "$RESP" uuid)
 check "repeat-ac task created" "$([ -n "$REPEAT_AC_TASK" ] && echo ok || echo '')" "ok"
 
-# 11. Create task with every N interval
+# 14. Create task with every N interval
 echo "--- Create Every 2 Weeks ---"
 RESP=$(mcp_call "things_create_task" "{\"title\":\"${PREFIX} Every 2 Weeks\",\"when\":\"today\",\"repeat\":\"every 2 weeks\"}" | extract_text)
 REPEAT_2W_TASK=$(field "$RESP" uuid)
 check "every-2-weeks task created" "$([ -n "$REPEAT_2W_TASK" ] && echo ok || echo '')" "ok"
 
-# 12. Edit task to add repeat
+# 15. Edit task to add repeat
 echo "--- Edit Task: Add Repeat ---"
 RESP=$(mcp_call "things_edit_task" "{\"uuid\":\"${CREATED_TASK}\",\"repeat\":\"monthly\"}" | extract_text)
 check "add repeat ok" "$(field "$RESP" status)" "updated"
 
-# 13. Edit task to clear repeat
+# 16. Edit task to clear repeat
 echo "--- Edit Task: Clear Repeat ---"
 RESP=$(mcp_call "things_edit_task" "{\"uuid\":\"${CREATED_TASK}\",\"repeat\":\"none\"}" | extract_text)
 check "clear repeat ok" "$(field "$RESP" status)" "updated"
 
-# 14. Create subtask
+# 17. Create subtask
 echo "--- Create Subtask ---"
 RESP=$(mcp_call "things_create_task" "{\"title\":\"${PREFIX} Subtask\",\"parent_task\":\"${CREATED_TASK}\"}" | extract_text)
 SUBTASK=$(field "$RESP" uuid)
 check "subtask created" "$([ -n "$SUBTASK" ] && echo ok || echo '')" "ok"
 
-# 15. Verify subtask parent
+# 18. Verify subtask parent
 echo "--- Verify Subtask ---"
 STASK=$(mcp_call "things_get_task" "{\"uuid\":\"${SUBTASK}\"}" | extract_text)
 check "subtask parent" "$(field "$STASK" project_id)" "${CREATED_TASK}"
 
-# 16. Edit task to move under parent
+# 19. Edit task to move under parent
 echo "--- Edit Task: Set Parent ---"
 RESP2=$(mcp_call "things_create_task" "{\"title\":\"${PREFIX} Orphan\"}" | extract_text)
 ORPHAN_TASK=$(field "$RESP2" uuid)
 RESP=$(mcp_call "things_edit_task" "{\"uuid\":\"${ORPHAN_TASK}\",\"parent_task\":\"${CREATED_TASK}\"}" | extract_text)
 check "set parent ok" "$(field "$RESP" status)" "updated"
 
-# 17. Create checklist item
+# 20. Create checklist item
 echo "--- Create Checklist Item ---"
 RESP=$(mcp_call "things_create_checklist_item" "{\"title\":\"${PREFIX} Checklist Item\",\"task_uuid\":\"${CREATED_TASK}\"}" | extract_text)
 CREATED_CHECKLIST=$(field "$RESP" uuid)
 check "checklist item created" "$([ -n "$CREATED_CHECKLIST" ] && echo ok || echo '')" "ok"
 
-# 18. List checklist items
+# 21. List checklist items
 echo "--- List Checklist Items ---"
 CLIST=$(mcp_call "things_list_checklist_items" "{\"task_uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "checklist item in list" "$(has_uuid "$CLIST" "$CREATED_CHECKLIST")" "true"
 
-# 19. Complete checklist item
+# 22. Complete checklist item
 echo "--- Complete Checklist Item ---"
 RESP=$(mcp_call "things_complete_checklist_item" "{\"uuid\":\"${CREATED_CHECKLIST}\"}" | extract_text)
 check "checklist complete ok" "$(field "$RESP" status)" "completed"
 
-# 20. Uncomplete checklist item
+# 23. Uncomplete checklist item
 echo "--- Uncomplete Checklist Item ---"
 RESP=$(mcp_call "things_uncomplete_checklist_item" "{\"uuid\":\"${CREATED_CHECKLIST}\"}" | extract_text)
 check "checklist uncomplete ok" "$(field "$RESP" status)" "uncompleted"
 
-# 21. Delete checklist item
+# 24. Delete checklist item
 echo "--- Delete Checklist Item ---"
 RESP=$(mcp_call "things_delete_checklist_item" "{\"uuid\":\"${CREATED_CHECKLIST}\"}" | extract_text)
 check "checklist delete ok" "$(field "$RESP" status)" "deleted"
 
-# 22. Move to someday
+# 25. Move to someday
 echo "--- Move to Someday ---"
 RESP=$(mcp_call "things_move_to_someday" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to someday" "$(field "$RESP" status)" "moved_to_someday"
 
-# 23. Move to anytime
+# 26. Move to anytime
 echo "--- Move to Anytime ---"
 RESP=$(mcp_call "things_move_to_anytime" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to anytime" "$(field "$RESP" status)" "moved_to_anytime"
 
-# 24. Move to inbox
+# 27. Move to inbox
 echo "--- Move to Inbox ---"
 RESP=$(mcp_call "things_move_to_inbox" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to inbox" "$(field "$RESP" status)" "moved_to_inbox"
 
-# 25. Move to today
+# 28. Move to today
 echo "--- Move to Today ---"
 RESP=$(mcp_call "things_move_to_today" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to today" "$(field "$RESP" status)" "moved_to_today"
 
-# 26. Complete task
+# 29. Complete task
 echo "--- Complete Task ---"
 RESP=$(mcp_call "things_complete_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "complete ok" "$(field "$RESP" status)" "completed"
@@ -222,7 +246,7 @@ check "complete ok" "$(field "$RESP" status)" "completed"
 TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "status is completed" "$(field "$TASK" status)" "completed"
 
-# 27. Uncomplete task
+# 30. Uncomplete task
 echo "--- Uncomplete Task ---"
 RESP=$(mcp_call "things_uncomplete_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "uncomplete ok" "$(field "$RESP" status)" "uncompleted"
@@ -230,25 +254,30 @@ check "uncomplete ok" "$(field "$RESP" status)" "uncompleted"
 TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "status is open again" "$(field "$TASK" status)" "open"
 
-# 28. Trash task
+# 31. Trash task
 echo "--- Trash Task ---"
 RESP=$(mcp_call "things_trash_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "trash ok" "$(field "$RESP" status)" "trashed"
 
-# 29. Untrash task
+# 32. Untrash task
 echo "--- Untrash Task ---"
 RESP=$(mcp_call "things_untrash_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "untrash ok" "$(field "$RESP" status)" "restored"
 
-# 30. List today — verify task appears
+# 33. List today — verify task appears
 echo "--- List Today ---"
 TODAY=$(mcp_call "things_list_today" "{}" | extract_text)
 check "task in today" "$(has_uuid "$TODAY" "$CREATED_TASK")" "true"
 
-# 31. List project tasks
+# 34. List project tasks
 echo "--- List Project Tasks ---"
 PROJ=$(mcp_call "things_list_project_tasks" "{\"project_uuid\":\"${CREATED_PROJECT}\"}" | extract_text)
 check "task in project" "$(has_uuid "$PROJ" "$CREATED_TASK")" "true"
+
+# 35. List completed tasks
+echo "--- List Completed ---"
+COMPLETED=$(mcp_call "things_list_completed" "{\"limit\":5}" | extract_text)
+check "completed returns array" "$(echo "$COMPLETED" | python3 -c "import sys,json; items=json.loads(sys.stdin.read()); print('ok' if isinstance(items, list) else 'fail')")" "ok"
 
 # --- cleanup ---
 

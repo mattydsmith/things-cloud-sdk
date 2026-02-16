@@ -219,6 +219,16 @@ func mcpListAreaTasks(_ context.Context, req mcp.CallToolRequest) (*mcp.CallTool
 	return tasksResult(tasks), nil
 }
 
+func mcpListCompleted(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	syncer.Sync()
+	limit := req.GetInt("limit", 50)
+	tasks, err := syncer.State().CompletedTasks(limit)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return tasksResult(tasks), nil
+}
+
 func mcpListChecklistItems(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	taskUUID, err := req.RequireString("task_uuid")
 	if err != nil {
@@ -332,6 +342,7 @@ func mcpEditTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 		Deadline:   req.GetString("deadline", ""),
 		Project:    req.GetString("project", ""),
 		ParentTask: req.GetString("parent_task", ""),
+		Area:       req.GetString("area", ""),
 		Tags:       req.GetString("tags", ""),
 		Repeat:     req.GetString("repeat", ""),
 	}); err != nil {
@@ -753,6 +764,14 @@ func newMCPHandler() http.Handler {
 		),
 	), mcpListAreaTasks)
 
+	s.AddTool(mcp.NewTool("things_list_completed",
+		mcp.WithDescription("List recently completed tasks, ordered by completion date (most recent first)"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithNumber("limit",
+			mcp.Description("Maximum number of tasks to return (default 50)"),
+		),
+	), mcpListCompleted)
+
 	s.AddTool(mcp.NewTool("things_list_checklist_items",
 		mcp.WithDescription("List checklist items (lightweight checkboxes) within a task. These are different from subtasks — checklist items live inside the task's detail view and cannot have their own dates, tags, or notes. Use things_list_project_tasks with the task UUID to find subtasks instead."),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -838,7 +857,7 @@ func newMCPHandler() http.Handler {
 			mcp.Description("New title"),
 		),
 		mcp.WithString("note",
-			mcp.Description("New notes"),
+			mcp.Description("New notes, or 'none' to clear existing notes"),
 		),
 		mcp.WithString("when",
 			mcp.Description("When to start the task. Use this for most date-related requests. Accepts: 'today', 'anytime' (triaged, no date), 'someday' (deferred), 'inbox' (clears schedule), 'none' (strip dates, keep in project/area), or a YYYY-MM-DD date. A future date puts the task in Upcoming. Today's date or past dates go to Today view."),
@@ -851,6 +870,9 @@ func newMCPHandler() http.Handler {
 		),
 		mcp.WithString("parent_task",
 			mcp.Description("Move task under a parent task (make it a subtask). Takes precedence over project."),
+		),
+		mcp.WithString("area",
+			mcp.Description("Area UUID to assign the task to, or 'none' to remove from area"),
 		),
 		mcp.WithString("tags",
 			mcp.Description("New comma-separated tag UUIDs (replaces existing)"),

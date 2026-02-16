@@ -41,7 +41,7 @@ You can freely make changes in the Things app and immediately use the API/MCP to
 | Path | Purpose |
 |------|---------|
 | `server/main.go` | HTTP server, routing, auth middleware |
-| `server/mcp.go` | MCP server with 32 tool definitions and handlers |
+| `server/mcp.go` | MCP server with 33 tool definitions and handlers |
 | `server/write.go` | Write operations shared between REST and MCP |
 | `sync/` | Persistent SQLite sync engine with semantic change detection |
 
@@ -71,7 +71,7 @@ The server runs on [Fly.io](https://fly.io):
 
 The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontextprotocol.io/) using Streamable HTTP transport (JSON-RPC 2.0 over HTTP POST). No authentication — designed for use with Claude.ai custom connectors.
 
-### Tools (32)
+### Tools (33)
 
 #### Read tools
 
@@ -85,6 +85,7 @@ The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontext
 | `things_list_tags` | All tags | — |
 | `things_list_project_tasks` | Tasks in a project | `project_uuid` |
 | `things_list_area_tasks` | Tasks in an area | `area_uuid` |
+| `things_list_completed` | Recently completed tasks | `limit` |
 | `things_list_checklist_items` | Checklist items for a task | `task_uuid` |
 | `things_get_task` | Get a single task | `uuid` |
 | `things_get_area` | Get a single area | `uuid` |
@@ -99,7 +100,7 @@ The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontext
 | `things_create_heading` | Create a heading in a project | `title` (req), `project` |
 | `things_create_area` | Create an area | `title` (req), `tags` |
 | `things_create_tag` | Create a tag | `title` (req), `shorthand`, `parent` |
-| `things_edit_task` | Edit a task | `uuid` (req), `title`, `note`, `when`, `deadline`, `project`, `parent_task`, `tags`, `repeat` |
+| `things_edit_task` | Edit a task | `uuid` (req), `title`, `note`, `when`, `deadline`, `project`, `parent_task`, `area`, `tags`, `repeat` |
 | `things_complete_task` | Complete a task | `uuid` |
 | `things_uncomplete_task` | Reopen a completed task | `uuid` |
 | `things_trash_task` | Move to trash | `uuid` |
@@ -154,6 +155,20 @@ Only use when the user explicitly mentions a deadline. Most date requests should
 | `YYYY-MM-DD` | Set a hard deadline |
 | `none` | Clear an existing deadline (edit only) |
 
+#### `note` — Task notes
+
+| Value | Effect |
+|-------|--------|
+| *any text* | Set the task notes |
+| `none` | Clear existing notes (edit only) |
+
+#### `area` — Area assignment (edit only)
+
+| Value | Effect |
+|-------|--------|
+| *area UUID* | Assign the task to an area |
+| `none` | Remove from area |
+
 #### `repeat` — Recurring tasks
 
 | Value | Effect |
@@ -202,13 +217,13 @@ All `/api/*` endpoints require `Authorization: Bearer <API_KEY>` when `API_KEY` 
 
 ## Testing
 
-105 integration tests across 5 test suites, all running against the live deployment.
+112 integration tests across 5 test suites, all running against the live deployment.
 
 ```bash
 # Daily smoke test (11 checks, ~15s) — core read/write workflow
 ./tests/test-smoke.sh
 
-# Full MCP write tools (36 checks, ~60s) — all write operations end-to-end
+# Full MCP write tools (43 checks, ~60s) — all write operations end-to-end
 ./tests/test-mcp.sh 010
 
 # MCP read tools (29 checks, ~30s) — all read-only tools

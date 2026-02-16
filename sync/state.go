@@ -176,6 +176,21 @@ func (st *State) TasksInArea(areaUUID string, opts QueryOpts) ([]*things.Task, e
 	return st.scanTaskUUIDs(rows)
 }
 
+// CompletedTasks returns completed tasks, ordered by completion date (most recent first)
+func (st *State) CompletedTasks(limit int) ([]*things.Task, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND status = 3 AND deleted = 0 AND in_trash = 0
+		ORDER BY completion_date DESC LIMIT ?`
+	rows, err := st.db.Query(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return st.scanTaskUUIDs(rows)
+}
+
 // ChecklistItems returns checklist items for a task
 func (st *State) ChecklistItems(taskUUID string) ([]*things.CheckListItem, error) {
 	rows, err := st.db.Query(`

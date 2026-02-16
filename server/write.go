@@ -195,6 +195,16 @@ func (u *taskUpdate) project(uuid string) *taskUpdate {
 	return u
 }
 
+func (u *taskUpdate) area(uuid string) *taskUpdate {
+	u.fields["ar"] = []string{uuid}
+	return u
+}
+
+func (u *taskUpdate) clearArea() *taskUpdate {
+	u.fields["ar"] = []string{}
+	return u
+}
+
 func (u *taskUpdate) tags(uuids []string) *taskUpdate {
 	u.fields["tg"] = uuids
 	return u
@@ -229,6 +239,7 @@ type EditTaskRequest struct {
 	Deadline   string `json:"deadline,omitempty"`
 	Project    string `json:"project,omitempty"`
 	ParentTask string `json:"parent_task,omitempty"`
+	Area       string `json:"area,omitempty"`
 	Tags       string `json:"tags,omitempty"`
 	Repeat     string `json:"repeat,omitempty"` // daily, weekly, monthly, yearly, every N days/weeks/months/years, none
 }
@@ -487,7 +498,9 @@ func editTask(req EditTaskRequest) error {
 	if req.Title != "" {
 		u.title(req.Title)
 	}
-	if req.Note != "" {
+	if req.Note == "none" {
+		u.clearNote()
+	} else if req.Note != "" {
 		u.note(req.Note)
 	}
 	if req.When == "none" {
@@ -513,6 +526,11 @@ func editTask(req EditTaskRequest) error {
 	}
 	if req.Tags != "" {
 		u.tags(strings.Split(req.Tags, ","))
+	}
+	if req.Area == "none" {
+		u.clearArea()
+	} else if req.Area != "" {
+		u.area(req.Area)
 	}
 	if req.Repeat == "none" {
 		u.fields["rr"] = nil

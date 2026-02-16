@@ -2,14 +2,14 @@
 
 ## Medium Priority
 
-### Add area assignment on task edit
-The `things_edit_task` tool can set a project but not an area. Add an `area` parameter that sets the area on a task.
+### ~~Add area assignment on task edit~~ (Done)
+Added `area` parameter to `things_edit_task`. Set an area UUID to assign, or `"none"` to clear.
 
-### Add notes clearing (`note: "none"`)
-Can set notes but not clear them. Add support for `note: "none"` on `things_edit_task` to clear notes, similar to `deadline: "none"`.
+### ~~Add notes clearing (`note: "none"`)~~ (Done)
+Added support for `note: "none"` on `things_edit_task` to clear notes, matching `deadline: "none"` pattern.
 
-### Add completed tasks list tool
-No way to see recently completed tasks. Add a `things_list_completed` tool that returns completed tasks, possibly with a date range filter.
+### ~~Add completed tasks list tool~~ (Done)
+Added `things_list_completed` tool (33rd tool). Returns completed tasks ordered by most recent, with optional `limit` parameter (default 50).
 
 ## Lower Priority
 

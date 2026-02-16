@@ -59,7 +59,7 @@ Leaves no residual data — the test task is trashed at the end.
 
 ## 2. MCP Full Write Tools (`test-mcp.sh`)
 
-**Status: Implemented — 36/36 passing**
+**Status: Implemented — 43/43 passing**
 
 Each cycle creates test entities with a `[test-NNN]` prefix, runs checks, then cleans up.
 
@@ -86,63 +86,75 @@ Each cycle creates test entities with a `[test-NNN]` prefix, runs checks, then c
 |---|------|-------|
 | 8 | `things_edit_task` | Response status=updated; re-get confirms new title |
 
+### Notes and area
+
+| # | Tool | Check |
+|---|------|-------|
+| 9 | `things_edit_task` | Clear notes with note=none; status=updated |
+| 10 | `things_get_task` | Verify notes are empty |
+| 11 | `things_edit_task` | Set area on task; status=updated |
+| 12 | `things_get_task` | Verify area_id matches |
+| 13 | `things_edit_task` | Clear area with area=none; status=updated |
+| 14 | `things_get_task` | Verify area_id is empty |
+
 ### Repeat
 
 | # | Tool | Check |
 |---|------|-------|
-| 9 | `things_create_task` | Create with repeat=daily; UUID returned |
-| 10 | `things_create_task` | Create with repeat=weekly after completion; UUID returned |
-| 11 | `things_create_task` | Create with repeat=every 2 weeks; UUID returned |
-| 12 | `things_edit_task` | Add repeat=monthly to existing task; status=updated |
-| 13 | `things_edit_task` | Clear repeat with repeat=none; status=updated |
+| 12 | `things_create_task` | Create with repeat=daily; UUID returned |
+| 13 | `things_create_task` | Create with repeat=weekly after completion; UUID returned |
+| 14 | `things_create_task` | Create with repeat=every 2 weeks; UUID returned |
+| 15 | `things_edit_task` | Add repeat=monthly to existing task; status=updated |
+| 16 | `things_edit_task` | Clear repeat with repeat=none; status=updated |
 
 ### Subtasks
 
 | # | Tool | Check |
 |---|------|-------|
-| 14 | `things_create_task` | Create with parent_task; UUID returned |
-| 15 | `things_get_task` | Subtask's project_id matches parent task UUID |
-| 16 | `things_edit_task` | Move orphan task under parent; status=updated |
+| 17 | `things_create_task` | Create with parent_task; UUID returned |
+| 18 | `things_get_task` | Subtask's project_id matches parent task UUID |
+| 19 | `things_edit_task` | Move orphan task under parent; status=updated |
 
 ### Checklist items
 
 | # | Tool | Check |
 |---|------|-------|
-| 17 | `things_create_checklist_item` | Create checklist item on task; UUID returned |
-| 18 | `things_list_checklist_items` | Checklist item UUID appears in list |
-| 19 | `things_complete_checklist_item` | status=completed |
-| 20 | `things_uncomplete_checklist_item` | status=uncompleted |
-| 21 | `things_delete_checklist_item` | status=deleted |
+| 20 | `things_create_checklist_item` | Create checklist item on task; UUID returned |
+| 21 | `things_list_checklist_items` | Checklist item UUID appears in list |
+| 22 | `things_complete_checklist_item` | status=completed |
+| 23 | `things_uncomplete_checklist_item` | status=uncompleted |
+| 24 | `things_delete_checklist_item` | status=deleted |
 
 ### Move
 
 | # | Tool | Check |
 |---|------|-------|
-| 22 | `things_move_to_someday` | status=moved_to_someday |
-| 23 | `things_move_to_anytime` | status=moved_to_anytime |
-| 24 | `things_move_to_inbox` | status=moved_to_inbox |
-| 25 | `things_move_to_today` | status=moved_to_today |
+| 25 | `things_move_to_someday` | status=moved_to_someday |
+| 26 | `things_move_to_anytime` | status=moved_to_anytime |
+| 27 | `things_move_to_inbox` | status=moved_to_inbox |
+| 28 | `things_move_to_today` | status=moved_to_today |
 
 ### Complete / Uncomplete
 
 | # | Tool | Check |
 |---|------|-------|
-| 26 | `things_complete_task` | Response status=completed; re-get confirms status=completed |
-| 27 | `things_uncomplete_task` | Response status=uncompleted; re-get confirms status=open |
+| 29 | `things_complete_task` | Response status=completed; re-get confirms status=completed |
+| 30 | `things_uncomplete_task` | Response status=uncompleted; re-get confirms status=open |
 
 ### Trash / Untrash
 
 | # | Tool | Check |
 |---|------|-------|
-| 28 | `things_trash_task` | status=trashed |
-| 29 | `things_untrash_task` | status=restored |
+| 31 | `things_trash_task` | status=trashed |
+| 32 | `things_untrash_task` | status=restored |
 
 ### List verification
 
 | # | Tool | Check |
 |---|------|-------|
-| 30 | `things_list_today` | Created task UUID appears in results |
-| 31 | `things_list_project_tasks` | Created task UUID appears in results |
+| 33 | `things_list_today` | Created task UUID appears in results |
+| 34 | `things_list_project_tasks` | Created task UUID appears in results |
+| 35 | `things_list_completed` | Returns valid array of completed tasks |
 
 ### Cleanup
 
@@ -256,7 +268,7 @@ Tests the JSON-RPC protocol layer independently from tool logic.
 
 | # | Check |
 |---|-------|
-| 4 | Returns 32 tools |
+| 4 | Returns 33 tools |
 | 5 | Includes `things_create_task` |
 | 6 | Includes `things_list_today` |
 | 7 | Includes `things_create_heading` |
