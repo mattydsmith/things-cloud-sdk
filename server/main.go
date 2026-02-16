@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	client *things.Client
-	syncer *sync.Syncer
+	client  *things.Client
+	syncer  *sync.Syncer
+	history *things.History
 )
 
 func jsonResponse(w http.ResponseWriter, data interface{}) {
@@ -147,6 +148,16 @@ func main() {
 		log.Printf("Initial sync complete: %d changes", len(changes))
 	}
 
+	// Get history for write operations
+	history, err = client.OwnHistory()
+	if err != nil {
+		log.Fatalf("failed to get history: %v", err)
+	}
+	if err := history.Sync(); err != nil {
+		log.Fatalf("failed to sync history: %v", err)
+	}
+	log.Println("History ready for writes")
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			jsonError(w, "not found", 404)
@@ -162,6 +173,12 @@ func main() {
 	http.HandleFunc("/api/projects", authMiddleware(handleProjects))
 	http.HandleFunc("/api/areas", authMiddleware(handleAreas))
 	http.HandleFunc("/api/tags", authMiddleware(handleTags))
+
+	// Write endpoints
+	http.HandleFunc("/api/tasks/create", authMiddleware(handleCreateTask))
+	http.HandleFunc("/api/tasks/complete", authMiddleware(handleCompleteTask))
+	http.HandleFunc("/api/tasks/trash", authMiddleware(handleTrashTask))
+	http.HandleFunc("/api/tasks/edit", authMiddleware(handleEditTask))
 
 	log.Printf("Starting server on :%s", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
