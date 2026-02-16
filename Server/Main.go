@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	things "github.com/arthursoares/things-cloud-sdk"
 	"github.com/arthursoares/things-cloud-sdk/sync"
