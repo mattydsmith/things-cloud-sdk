@@ -1,0 +1,23 @@
+# Things MCP — Backlog
+
+## Medium Priority
+
+### Add area assignment on task edit
+The `things_edit_task` tool can set a project but not an area. Add an `area` parameter that sets the area on a task.
+
+### Add notes clearing (`note: "none"`)
+Can set notes but not clear them. Add support for `note: "none"` on `things_edit_task` to clear notes, similar to `deadline: "none"`.
+
+### Add completed tasks list tool
+No way to see recently completed tasks. Add a `things_list_completed` tool that returns completed tasks, possibly with a date range filter.
+
+## Lower Priority
+
+### Add recurring task support
+The SDK supports repeat rules (daily/weekly/monthly/yearly with end conditions) but MCP tools don't expose them. Add recurrence params to `things_create_task` and `things_edit_task`.
+
+### Investigate tag/area deletion via Tombstone2
+Areas and tags can't currently be deleted. The SDK supports `Tombstone2` entities for explicit deletion — test if writing a Tombstone2 for a tag/area UUID actually deletes it.
+
+### Add subtask support
+Currently can create tasks under projects, but not subtasks under other tasks. Add a `parent_task` parameter to `things_create_task`.
