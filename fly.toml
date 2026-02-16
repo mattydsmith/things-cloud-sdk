@@ -1,19 +1,23 @@
-FROM golang:1.23-alpine AS builder
+# fly.toml app configuration file generated for things-cloud-mttsmth on 2026-02-16T17:32:28Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-RUN apk add --no-cache gcc musl-dev
+app = 'things-cloud-mttsmth'
+primary_region = 'iad'
 
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
+[build]
 
-COPY . .
-RUN CGO_ENABLED=1 go build -o things-server ./server/
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
-FROM alpine:latest
-RUN apk add --no-cache ca-certificates
-COPY --from=builder /app/things-server /usr/local/bin/things-server
-
-RUN mkdir -p /data
-
-EXPOSE 8080
-CMD ["things-server"]
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024
