@@ -230,25 +230,10 @@ type UUIDRequest struct {
 }
 
 // ---------------------------------------------------------------------------
-// Handlers
+// Core write operations (used by both HTTP handlers and MCP tools)
 // ---------------------------------------------------------------------------
 
-func handleCreateTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, "method not allowed", 405)
-		return
-	}
-
-	var req CreateTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid JSON: "+err.Error(), 400)
-		return
-	}
-	if req.Title == "" {
-		jsonError(w, "title is required", 400)
-		return
-	}
-
+func createTask(req CreateTaskRequest) (string, error) {
 	taskUUID := generateUUID()
 	now := nowTs()
 
@@ -307,93 +292,35 @@ func handleCreateTask(w http.ResponseWriter, r *http.Request) {
 
 	env := writeEnvelope{id: taskUUID, action: 0, kind: "Task6", payload: payload}
 	if err := history.Write(env); err != nil {
-		jsonError(w, fmt.Sprintf("write failed: %v", err), 500)
-		return
+		return "", fmt.Errorf("write failed: %w", err)
 	}
-
-	// Re-sync so local state reflects the new task
 	syncer.Sync()
-
-	jsonResponse(w, map[string]string{"status": "created", "uuid": taskUUID, "title": req.Title})
+	return taskUUID, nil
 }
 
-func handleCompleteTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, "method not allowed", 405)
-		return
-	}
-
-	var req UUIDRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid JSON: "+err.Error(), 400)
-		return
-	}
-	if req.UUID == "" {
-		jsonError(w, "uuid is required", 400)
-		return
-	}
-
+func completeTask(uuid string) error {
 	ts := nowTs()
 	u := newTaskUpdate().status(3).stopDate(ts)
-	env := writeEnvelope{id: req.UUID, action: 1, kind: "Task6", payload: u.build()}
-
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := history.Write(env); err != nil {
-		jsonError(w, fmt.Sprintf("write failed: %v", err), 500)
-		return
+		return fmt.Errorf("write failed: %w", err)
 	}
-
 	syncer.Sync()
-
-	jsonResponse(w, map[string]string{"status": "completed", "uuid": req.UUID})
+	return nil
 }
 
-func handleTrashTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, "method not allowed", 405)
-		return
-	}
-
-	var req UUIDRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid JSON: "+err.Error(), 400)
-		return
-	}
-	if req.UUID == "" {
-		jsonError(w, "uuid is required", 400)
-		return
-	}
-
+func trashTask(uuid string) error {
 	u := newTaskUpdate().trash(true)
-	env := writeEnvelope{id: req.UUID, action: 1, kind: "Task6", payload: u.build()}
-
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := history.Write(env); err != nil {
-		jsonError(w, fmt.Sprintf("write failed: %v", err), 500)
-		return
+		return fmt.Errorf("write failed: %w", err)
 	}
-
 	syncer.Sync()
-
-	jsonResponse(w, map[string]string{"status": "trashed", "uuid": req.UUID})
+	return nil
 }
 
-func handleEditTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, "method not allowed", 405)
-		return
-	}
-
-	var req EditTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid JSON: "+err.Error(), 400)
-		return
-	}
-	if req.UUID == "" {
-		jsonError(w, "uuid is required", 400)
-		return
-	}
-
+func editTask(req EditTaskRequest) error {
 	u := newTaskUpdate()
-
 	if req.Title != "" {
 		u.title(req.Title)
 	}
@@ -425,16 +352,254 @@ func handleEditTask(w http.ResponseWriter, r *http.Request) {
 	if req.Tags != "" {
 		u.tags(strings.Split(req.Tags, ","))
 	}
-
 	env := writeEnvelope{id: req.UUID, action: 1, kind: "Task6", payload: u.build()}
-
 	if err := history.Write(env); err != nil {
-		jsonError(w, fmt.Sprintf("write failed: %v", err), 500)
-		return
+		return fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return nil
+}
+
+func moveTaskToToday(uuid string) error {
+	today := todayMidnightUTC()
+	u := newTaskUpdate().schedule(1, today, today)
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		return fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return nil
+}
+
+func moveTaskToAnytime(uuid string) error {
+	u := newTaskUpdate().schedule(1, nil, nil)
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		return fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return nil
+}
+
+func moveTaskToSomeday(uuid string) error {
+	u := newTaskUpdate().schedule(2, nil, nil)
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		return fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return nil
+}
+
+func moveTaskToInbox(uuid string) error {
+	u := newTaskUpdate().schedule(0, nil, nil)
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		return fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return nil
+}
+
+func uncompleteTask(uuid string) error {
+	u := newTaskUpdate().status(0).stopDate(0)
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		return fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return nil
+}
+
+func untrashTask(uuid string) error {
+	u := newTaskUpdate().trash(false)
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		return fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return nil
+}
+
+func createArea(title string, tagUUIDs []string) (string, error) {
+	areaUUID := generateUUID()
+	if tagUUIDs == nil {
+		tagUUIDs = []string{}
+	}
+	payload := map[string]any{
+		"ix": 0,
+		"tt": title,
+		"tg": tagUUIDs,
+	}
+	env := writeEnvelope{id: areaUUID, action: 0, kind: "Area3", payload: payload}
+	if err := history.Write(env); err != nil {
+		return "", fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return areaUUID, nil
+}
+
+func createTag(title, shorthand, parentUUID string) (string, error) {
+	tagUUID := generateUUID()
+	pn := []string{}
+	if parentUUID != "" {
+		pn = []string{parentUUID}
+	}
+	payload := map[string]any{
+		"ix": 0,
+		"tt": title,
+		"sh": shorthand,
+		"pn": pn,
+	}
+	env := writeEnvelope{id: tagUUID, action: 0, kind: "Tag4", payload: payload}
+	if err := history.Write(env); err != nil {
+		return "", fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return tagUUID, nil
+}
+
+func createProject(title, note, when, deadline, areaUUID string) (string, error) {
+	projectUUID := generateUUID()
+	now := nowTs()
+
+	var st int
+	var sr, tir *int64
+	var dd *int64
+
+	switch when {
+	case "today":
+		st = 1
+		today := todayMidnightUTC()
+		sr = &today
+		tir = &today
+	case "someday":
+		st = 2
+	default:
+		st = 1 // projects default to anytime
 	}
 
-	syncer.Sync()
+	if deadline != "" {
+		if t, err := time.Parse("2006-01-02", deadline); err == nil {
+			ts := t.Unix()
+			dd = &ts
+		}
+	}
 
+	ar := []string{}
+	if areaUUID != "" {
+		ar = []string{areaUUID}
+	}
+
+	nt := emptyNote()
+	if note != "" {
+		nt = textNote(note)
+	}
+
+	payload := taskCreatePayload{
+		Tp: 1, Sr: sr, Dds: nil, Rt: []string{}, Rmd: nil,
+		Ss: 0, Tr: false, Dl: []string{}, Icp: false, St: st,
+		Ar: ar, Tt: title, Do: 0, Lai: nil, Tir: tir,
+		Tg: []string{}, Agr: []string{}, Ix: 0, Cd: now, Lt: false,
+		Icc: 0, Md: nil, Ti: 0, Dd: dd, Ato: nil, Nt: nt,
+		Icsd: nil, Pr: []string{}, Rp: nil, Acrd: nil, Sp: nil,
+		Sb: 0, Rr: nil, Xx: defaultExtension(),
+	}
+
+	env := writeEnvelope{id: projectUUID, action: 0, kind: "Task6", payload: payload}
+	if err := history.Write(env); err != nil {
+		return "", fmt.Errorf("write failed: %w", err)
+	}
+	syncer.Sync()
+	return projectUUID, nil
+}
+
+// ---------------------------------------------------------------------------
+// Handlers
+// ---------------------------------------------------------------------------
+
+func handleCreateTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", 405)
+		return
+	}
+	var req CreateTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON: "+err.Error(), 400)
+		return
+	}
+	if req.Title == "" {
+		jsonError(w, "title is required", 400)
+		return
+	}
+	taskUUID, err := createTask(req)
+	if err != nil {
+		jsonError(w, err.Error(), 500)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "created", "uuid": taskUUID, "title": req.Title})
+}
+
+func handleCompleteTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", 405)
+		return
+	}
+	var req UUIDRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON: "+err.Error(), 400)
+		return
+	}
+	if req.UUID == "" {
+		jsonError(w, "uuid is required", 400)
+		return
+	}
+	if err := completeTask(req.UUID); err != nil {
+		jsonError(w, err.Error(), 500)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "completed", "uuid": req.UUID})
+}
+
+func handleTrashTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", 405)
+		return
+	}
+	var req UUIDRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON: "+err.Error(), 400)
+		return
+	}
+	if req.UUID == "" {
+		jsonError(w, "uuid is required", 400)
+		return
+	}
+	if err := trashTask(req.UUID); err != nil {
+		jsonError(w, err.Error(), 500)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "trashed", "uuid": req.UUID})
+}
+
+func handleEditTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", 405)
+		return
+	}
+	var req EditTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON: "+err.Error(), 400)
+		return
+	}
+	if req.UUID == "" {
+		jsonError(w, "uuid is required", 400)
+		return
+	}
+	if err := editTask(req); err != nil {
+		jsonError(w, err.Error(), 500)
+		return
+	}
 	jsonResponse(w, map[string]string{"status": "updated", "uuid": req.UUID})
 }
 

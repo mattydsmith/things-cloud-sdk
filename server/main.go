@@ -119,6 +119,21 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func authHandlerMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKey := os.Getenv("API_KEY")
+		if apiKey == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer "+apiKey {
+			jsonError(w, "unauthorized", 401)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	username := os.Getenv("THINGS_USERNAME")
 	password := os.Getenv("THINGS_PASSWORD")
@@ -179,6 +194,9 @@ func main() {
 	http.HandleFunc("/api/tasks/complete", authMiddleware(handleCompleteTask))
 	http.HandleFunc("/api/tasks/trash", authMiddleware(handleTrashTask))
 	http.HandleFunc("/api/tasks/edit", authMiddleware(handleEditTask))
+
+	// MCP endpoint (no bearer auth — claude.ai connectors use OAuth which we don't implement)
+	http.Handle("/mcp", newMCPHandler())
 
 	log.Printf("Starting server on :%s", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
