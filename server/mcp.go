@@ -472,6 +472,86 @@ func mcpCreateProject(_ context.Context, req mcp.CallToolRequest) (*mcp.CallTool
 }
 
 // ---------------------------------------------------------------------------
+// Search handler
+// ---------------------------------------------------------------------------
+
+func mcpSearchTasks(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	query, err := req.RequireString("query")
+	if err != nil {
+		return mcp.NewToolResultError("query is required"), nil
+	}
+	syncer.Sync()
+	tasks, err := syncer.State().AllTasks(sync.QueryOpts{})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	q := strings.ToLower(query)
+	var matches []*things.Task
+	for _, t := range tasks {
+		if strings.Contains(strings.ToLower(t.Title), q) || strings.Contains(strings.ToLower(t.Note), q) {
+			matches = append(matches, t)
+		}
+	}
+	if matches == nil {
+		matches = []*things.Task{}
+	}
+	return tasksResult(matches), nil
+}
+
+// ---------------------------------------------------------------------------
+// Checklist item handlers
+// ---------------------------------------------------------------------------
+
+func mcpCreateChecklistItem(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	title, err := req.RequireString("title")
+	if err != nil {
+		return mcp.NewToolResultError("title is required"), nil
+	}
+	taskUUID, err := req.RequireString("task_uuid")
+	if err != nil {
+		return mcp.NewToolResultError("task_uuid is required"), nil
+	}
+	uuid, err := createChecklistItem(title, taskUUID)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "created", "uuid": uuid, "title": title}), nil
+}
+
+func mcpCompleteChecklistItem(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	if err := completeChecklistItem(uuid); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "completed", "uuid": uuid}), nil
+}
+
+func mcpUncompleteChecklistItem(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	if err := uncompleteChecklistItem(uuid); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "uncompleted", "uuid": uuid}), nil
+}
+
+func mcpDeleteChecklistItem(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	if err := deleteChecklistItem(uuid); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "deleted", "uuid": uuid}), nil
+}
+
+// ---------------------------------------------------------------------------
 // Smoke test
 // ---------------------------------------------------------------------------
 
@@ -717,8 +797,7 @@ func newMCPHandler() http.Handler {
 			mcp.Description("Task notes"),
 		),
 		mcp.WithString("when",
-			mcp.Description("When to start the task. Use this for most date-related requests — it controls which Things view the task appears in. 'today' = Today view, 'anytime' = Anytime (triaged, no date), 'someday' = Someday (deferred), 'inbox' = Inbox (default, needs triage), 'none' = strip dates without changing view (keeps task in its project/area)."),
-			mcp.Enum("today", "anytime", "someday", "inbox", "none"),
+			mcp.Description("When to start the task. Use this for most date-related requests. Accepts: 'today', 'anytime' (triaged, no date), 'someday' (deferred), 'inbox' (default), or a YYYY-MM-DD date. A future date puts the task in Upcoming and auto-surfaces it on that day. Today's date or past dates go to Today view."),
 		),
 		mcp.WithString("deadline",
 			mcp.Description("Hard deadline in YYYY-MM-DD format. Only use when the user explicitly mentions a deadline or due date — not for general scheduling. Most date requests should use 'when' instead."),
@@ -752,8 +831,7 @@ func newMCPHandler() http.Handler {
 			mcp.Description("New notes"),
 		),
 		mcp.WithString("when",
-			mcp.Description("When to start the task. Use this for most date-related requests — it controls which Things view the task appears in. 'today' = Today view, 'anytime' = Anytime (triaged, no date), 'someday' = Someday (deferred), 'inbox' = Inbox (clears schedule), 'none' = strip dates without changing view (keeps task in its project/area)."),
-			mcp.Enum("today", "anytime", "someday", "inbox", "none"),
+			mcp.Description("When to start the task. Use this for most date-related requests. Accepts: 'today', 'anytime' (triaged, no date), 'someday' (deferred), 'inbox' (clears schedule), 'none' (strip dates, keep in project/area), or a YYYY-MM-DD date. A future date puts the task in Upcoming. Today's date or past dates go to Today view."),
 		),
 		mcp.WithString("deadline",
 			mcp.Description("Hard deadline in YYYY-MM-DD format, or 'none' to clear an existing deadline. Only use when the user explicitly mentions a deadline or due date — not for general scheduling."),
@@ -879,6 +957,56 @@ func newMCPHandler() http.Handler {
 			mcp.Description("Area UUID to assign the project to"),
 		),
 	), mcpCreateProject)
+
+	// --- Search tools ---
+
+	s.AddTool(mcp.NewTool("things_search_tasks",
+		mcp.WithDescription("Search for tasks by title or note content (case-insensitive substring match)"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithString("query",
+			mcp.Required(),
+			mcp.Description("Text to search for in task titles and notes"),
+		),
+	), mcpSearchTasks)
+
+	// --- Checklist item tools ---
+
+	s.AddTool(mcp.NewTool("things_create_checklist_item",
+		mcp.WithDescription("Add a checklist item to a Things task"),
+		mcp.WithString("title",
+			mcp.Required(),
+			mcp.Description("Checklist item text"),
+		),
+		mcp.WithString("task_uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the task to add the checklist item to"),
+		),
+	), mcpCreateChecklistItem)
+
+	s.AddTool(mcp.NewTool("things_complete_checklist_item",
+		mcp.WithDescription("Mark a checklist item as completed"),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the checklist item to complete"),
+		),
+	), mcpCompleteChecklistItem)
+
+	s.AddTool(mcp.NewTool("things_uncomplete_checklist_item",
+		mcp.WithDescription("Mark a completed checklist item as open again"),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the checklist item to uncomplete"),
+		),
+	), mcpUncompleteChecklistItem)
+
+	s.AddTool(mcp.NewTool("things_delete_checklist_item",
+		mcp.WithDescription("Delete a checklist item"),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the checklist item to delete"),
+		),
+	), mcpDeleteChecklistItem)
 
 	// --- Diagnostic tools ---
 

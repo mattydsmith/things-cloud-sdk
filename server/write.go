@@ -258,6 +258,38 @@ func historyWrite(env writeEnvelope) error {
 	return nil
 }
 
+// parseWhen interprets the when parameter. Returns (st, sr, tir, handled).
+// For named values (today/anytime/someday/inbox/none) and YYYY-MM-DD dates.
+// A future date goes to Upcoming (st=2), today's date goes to Today (st=1).
+func parseWhen(when string) (st int, sr, tir *int64, handled bool) {
+	switch when {
+	case "today":
+		today := todayMidnightUTC()
+		return 1, &today, &today, true
+	case "anytime":
+		return 1, nil, nil, true
+	case "someday":
+		return 2, nil, nil, true
+	case "inbox":
+		return 0, nil, nil, true
+	case "none", "":
+		return -1, nil, nil, false
+	default:
+		// Try parsing as YYYY-MM-DD
+		if t, err := time.Parse("2006-01-02", when); err == nil {
+			ts := t.UTC().Unix()
+			today := todayMidnightUTC()
+			if ts <= today {
+				// Today or past → Today view
+				return 1, &ts, &ts, true
+			}
+			// Future → Upcoming view (st=2 with date)
+			return 2, &ts, nil, true
+		}
+		return -1, nil, nil, false
+	}
+}
+
 func createTask(req CreateTaskRequest) (string, error) {
 	taskUUID := generateUUID()
 	now := nowTs()
@@ -266,17 +298,9 @@ func createTask(req CreateTaskRequest) (string, error) {
 	var sr, tir *int64
 	var dd *int64
 
-	switch req.When {
-	case "today":
-		st = 1
-		today := todayMidnightUTC()
-		sr = &today
-		tir = &today
-	case "anytime":
-		st = 1
-	case "someday":
-		st = 2
-	default:
+	if s, r, t, ok := parseWhen(req.When); ok {
+		st, sr, tir = s, r, t
+	} else {
 		st = 0 // inbox
 	}
 
@@ -352,19 +376,11 @@ func editTask(req EditTaskRequest) error {
 	if req.Note != "" {
 		u.note(req.Note)
 	}
-	switch req.When {
-	case "today":
-		today := todayMidnightUTC()
-		u.schedule(1, today, today)
-	case "anytime":
-		u.schedule(1, nil, nil)
-	case "someday":
-		u.schedule(2, nil, nil)
-	case "inbox":
-		u.schedule(0, nil, nil)
-	case "none":
+	if req.When == "none" {
 		u.fields["sr"] = nil
 		u.fields["tir"] = nil
+	} else if st, sr, tir, ok := parseWhen(req.When); ok {
+		u.schedule(st, sr, tir)
 	}
 	if req.Deadline == "none" {
 		u.clearDeadline()
@@ -569,6 +585,76 @@ func createProject(title, note, when, deadline, areaUUID string) (string, error)
 	}
 	syncer.Sync()
 	return projectUUID, nil
+}
+
+// ---------------------------------------------------------------------------
+// Checklist item operations
+// ---------------------------------------------------------------------------
+
+func createChecklistItem(title, taskUUID string) (string, error) {
+	itemUUID := generateUUID()
+	now := nowTs()
+	payload := map[string]any{
+		"tt": title,
+		"ts": []string{taskUUID},
+		"ix": 0,
+		"cd": now,
+		"md": nil,
+		"ss": 0,
+		"sp": nil,
+		"lt": false,
+		"xx": defaultExtension(),
+	}
+	env := writeEnvelope{id: itemUUID, action: 0, kind: "ChecklistItem3", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return "", err
+	}
+	syncer.Sync()
+	return itemUUID, nil
+}
+
+func completeChecklistItem(uuid string) error {
+	ts := nowTs()
+	payload := map[string]any{
+		"md": ts,
+		"ss": 3,
+		"sp": ts,
+	}
+	env := writeEnvelope{id: uuid, action: 1, kind: "ChecklistItem3", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncer.Sync()
+	return nil
+}
+
+func uncompleteChecklistItem(uuid string) error {
+	payload := map[string]any{
+		"md": nowTs(),
+		"ss": 0,
+		"sp": nil,
+	}
+	env := writeEnvelope{id: uuid, action: 1, kind: "ChecklistItem3", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncer.Sync()
+	return nil
+}
+
+func deleteChecklistItem(uuid string) error {
+	// Delete via Tombstone2
+	tombUUID := generateUUID()
+	payload := map[string]any{
+		"dloid": uuid,
+		"dld":   nowTs(),
+	}
+	env := writeEnvelope{id: tombUUID, action: 0, kind: "Tombstone2", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncer.Sync()
+	return nil
 }
 
 // ---------------------------------------------------------------------------
