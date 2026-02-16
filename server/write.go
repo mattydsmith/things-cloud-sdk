@@ -362,6 +362,9 @@ func editTask(req EditTaskRequest) error {
 		u.schedule(2, nil, nil)
 	case "inbox":
 		u.schedule(0, nil, nil)
+	case "none":
+		u.fields["sr"] = nil
+		u.fields["tir"] = nil
 	}
 	if req.Deadline == "none" {
 		u.clearDeadline()
