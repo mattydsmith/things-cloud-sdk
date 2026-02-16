@@ -19,5 +19,5 @@ Added `repeat` parameter to `things_create_task` and `things_edit_task`. Support
 ### Investigate tag/area deletion via Tombstone2
 Areas and tags can't currently be deleted. The SDK supports `Tombstone2` entities for explicit deletion — test if writing a Tombstone2 for a tag/area UUID actually deletes it.
 
-### Add subtask support
-Currently can create tasks under projects, but not subtasks under other tasks. Add a `parent_task` parameter to `things_create_task`.
+### ~~Add subtask support~~ (Done)
+Added `parent_task` parameter to `things_create_task` and `things_edit_task`. Sets the `pr` wire field to the parent task UUID.

@@ -293,13 +293,14 @@ func mcpCreateTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolRes
 		return mcp.NewToolResultError("title is required"), nil
 	}
 	uuid, err := createTask(CreateTaskRequest{
-		Title:    title,
-		Note:     req.GetString("note", ""),
-		When:     req.GetString("when", ""),
-		Deadline: req.GetString("deadline", ""),
-		Project:  req.GetString("project", ""),
-		Tags:     req.GetString("tags", ""),
-		Repeat:   req.GetString("repeat", ""),
+		Title:      title,
+		Note:       req.GetString("note", ""),
+		When:       req.GetString("when", ""),
+		Deadline:   req.GetString("deadline", ""),
+		Project:    req.GetString("project", ""),
+		ParentTask: req.GetString("parent_task", ""),
+		Tags:       req.GetString("tags", ""),
+		Repeat:     req.GetString("repeat", ""),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -324,14 +325,15 @@ func mcpEditTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 		return mcp.NewToolResultError("uuid is required"), nil
 	}
 	if err := editTask(EditTaskRequest{
-		UUID:     uuid,
-		Title:    req.GetString("title", ""),
-		Note:     req.GetString("note", ""),
-		When:     req.GetString("when", ""),
-		Deadline: req.GetString("deadline", ""),
-		Project:  req.GetString("project", ""),
-		Tags:     req.GetString("tags", ""),
-		Repeat:   req.GetString("repeat", ""),
+		UUID:       uuid,
+		Title:      req.GetString("title", ""),
+		Note:       req.GetString("note", ""),
+		When:       req.GetString("when", ""),
+		Deadline:   req.GetString("deadline", ""),
+		Project:    req.GetString("project", ""),
+		ParentTask: req.GetString("parent_task", ""),
+		Tags:       req.GetString("tags", ""),
+		Repeat:     req.GetString("repeat", ""),
 	}); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -807,6 +809,9 @@ func newMCPHandler() http.Handler {
 		mcp.WithString("project",
 			mcp.Description("Project UUID to add the task to"),
 		),
+		mcp.WithString("parent_task",
+			mcp.Description("Parent task UUID to create this as a subtask. Takes precedence over project."),
+		),
 		mcp.WithString("tags",
 			mcp.Description("Comma-separated tag UUIDs"),
 		),
@@ -843,6 +848,9 @@ func newMCPHandler() http.Handler {
 		),
 		mcp.WithString("project",
 			mcp.Description("New project UUID"),
+		),
+		mcp.WithString("parent_task",
+			mcp.Description("Move task under a parent task (make it a subtask). Takes precedence over project."),
 		),
 		mcp.WithString("tags",
 			mcp.Description("New comma-separated tag UUIDs (replaces existing)"),

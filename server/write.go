@@ -210,25 +210,27 @@ func (u *taskUpdate) build() map[string]any {
 
 // CreateTaskRequest is the JSON body for POST /api/tasks/create.
 type CreateTaskRequest struct {
-	Title    string `json:"title"`
-	Note     string `json:"note,omitempty"`
-	When     string `json:"when,omitempty"`     // today, anytime, someday, inbox, YYYY-MM-DD
-	Deadline string `json:"deadline,omitempty"` // YYYY-MM-DD
-	Project  string `json:"project,omitempty"`  // project UUID
-	Tags     string `json:"tags,omitempty"`     // comma-separated tag UUIDs
-	Repeat   string `json:"repeat,omitempty"`   // daily, weekly, monthly, yearly, every N days/weeks/months/years
+	Title      string `json:"title"`
+	Note       string `json:"note,omitempty"`
+	When       string `json:"when,omitempty"`        // today, anytime, someday, inbox, YYYY-MM-DD
+	Deadline   string `json:"deadline,omitempty"`    // YYYY-MM-DD
+	Project    string `json:"project,omitempty"`     // project UUID
+	ParentTask string `json:"parent_task,omitempty"` // parent task UUID (for subtasks)
+	Tags       string `json:"tags,omitempty"`        // comma-separated tag UUIDs
+	Repeat     string `json:"repeat,omitempty"`      // daily, weekly, monthly, yearly, every N days/weeks/months/years
 }
 
 // EditTaskRequest is the JSON body for POST /api/tasks/edit.
 type EditTaskRequest struct {
-	UUID     string `json:"uuid"`
-	Title    string `json:"title,omitempty"`
-	Note     string `json:"note,omitempty"`
-	When     string `json:"when,omitempty"`
-	Deadline string `json:"deadline,omitempty"`
-	Project  string `json:"project,omitempty"`
-	Tags     string `json:"tags,omitempty"`
-	Repeat   string `json:"repeat,omitempty"` // daily, weekly, monthly, yearly, every N days/weeks/months/years, none
+	UUID       string `json:"uuid"`
+	Title      string `json:"title,omitempty"`
+	Note       string `json:"note,omitempty"`
+	When       string `json:"when,omitempty"`
+	Deadline   string `json:"deadline,omitempty"`
+	Project    string `json:"project,omitempty"`
+	ParentTask string `json:"parent_task,omitempty"`
+	Tags       string `json:"tags,omitempty"`
+	Repeat     string `json:"repeat,omitempty"` // daily, weekly, monthly, yearly, every N days/weeks/months/years, none
 }
 
 // UUIDRequest is the JSON body for complete/trash endpoints.
@@ -408,7 +410,9 @@ func createTask(req CreateTaskRequest) (string, error) {
 	}
 
 	pr := []string{}
-	if req.Project != "" {
+	if req.ParentTask != "" {
+		pr = []string{req.ParentTask}
+	} else if req.Project != "" {
 		pr = []string{req.Project}
 		if req.When == "" {
 			st = 1
@@ -499,7 +503,9 @@ func editTask(req EditTaskRequest) error {
 			u.deadline(t.Unix())
 		}
 	}
-	if req.Project != "" {
+	if req.ParentTask != "" {
+		u.project(req.ParentTask)
+	} else if req.Project != "" {
 		u.project(req.Project)
 		if req.When == "" {
 			u.schedule(1, 0, 0)

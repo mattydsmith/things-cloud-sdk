@@ -150,27 +150,45 @@ echo "--- Edit Task: Clear Repeat ---"
 RESP=$(mcp_call "things_edit_task" "{\"uuid\":\"${CREATED_TASK}\",\"repeat\":\"none\"}" | extract_text)
 check "clear repeat ok" "$(field "$RESP" status)" "updated"
 
-# 14. Move to someday
+# 14. Create subtask
+echo "--- Create Subtask ---"
+RESP=$(mcp_call "things_create_task" "{\"title\":\"${PREFIX} Subtask\",\"parent_task\":\"${CREATED_TASK}\"}" | extract_text)
+SUBTASK=$(field "$RESP" uuid)
+check "subtask created" "$([ -n "$SUBTASK" ] && echo ok || echo '')" "ok"
+
+# 15. Verify subtask parent
+echo "--- Verify Subtask ---"
+STASK=$(mcp_call "things_get_task" "{\"uuid\":\"${SUBTASK}\"}" | extract_text)
+check "subtask parent" "$(field "$STASK" project_id)" "${CREATED_TASK}"
+
+# 16. Edit task to move under parent
+echo "--- Edit Task: Set Parent ---"
+RESP2=$(mcp_call "things_create_task" "{\"title\":\"${PREFIX} Orphan\"}" | extract_text)
+ORPHAN_TASK=$(field "$RESP2" uuid)
+RESP=$(mcp_call "things_edit_task" "{\"uuid\":\"${ORPHAN_TASK}\",\"parent_task\":\"${CREATED_TASK}\"}" | extract_text)
+check "set parent ok" "$(field "$RESP" status)" "updated"
+
+# 17. Move to someday
 echo "--- Move to Someday ---"
 RESP=$(mcp_call "things_move_to_someday" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to someday" "$(field "$RESP" status)" "moved_to_someday"
 
-# 15. Move to anytime
+# 18. Move to anytime
 echo "--- Move to Anytime ---"
 RESP=$(mcp_call "things_move_to_anytime" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to anytime" "$(field "$RESP" status)" "moved_to_anytime"
 
-# 16. Move to inbox
+# 19. Move to inbox
 echo "--- Move to Inbox ---"
 RESP=$(mcp_call "things_move_to_inbox" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to inbox" "$(field "$RESP" status)" "moved_to_inbox"
 
-# 17. Move to today
+# 20. Move to today
 echo "--- Move to Today ---"
 RESP=$(mcp_call "things_move_to_today" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to today" "$(field "$RESP" status)" "moved_to_today"
 
-# 18. Complete task
+# 21. Complete task
 echo "--- Complete Task ---"
 RESP=$(mcp_call "things_complete_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "complete ok" "$(field "$RESP" status)" "completed"
@@ -178,7 +196,7 @@ check "complete ok" "$(field "$RESP" status)" "completed"
 TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "status is completed" "$(field "$TASK" status)" "completed"
 
-# 19. Uncomplete task
+# 22. Uncomplete task
 echo "--- Uncomplete Task ---"
 RESP=$(mcp_call "things_uncomplete_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "uncomplete ok" "$(field "$RESP" status)" "uncompleted"
@@ -186,22 +204,22 @@ check "uncomplete ok" "$(field "$RESP" status)" "uncompleted"
 TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "status is open again" "$(field "$TASK" status)" "open"
 
-# 20. Trash task
+# 23. Trash task
 echo "--- Trash Task ---"
 RESP=$(mcp_call "things_trash_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "trash ok" "$(field "$RESP" status)" "trashed"
 
-# 21. Untrash task
+# 24. Untrash task
 echo "--- Untrash Task ---"
 RESP=$(mcp_call "things_untrash_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "untrash ok" "$(field "$RESP" status)" "restored"
 
-# 22. List today — verify task appears
+# 25. List today — verify task appears
 echo "--- List Today ---"
 TODAY=$(mcp_call "things_list_today" "{}" | extract_text)
 check "task in today" "$(has_uuid "$TODAY" "$CREATED_TASK")" "true"
 
-# 23. List project tasks
+# 26. List project tasks
 echo "--- List Project Tasks ---"
 PROJ=$(mcp_call "things_list_project_tasks" "{\"project_uuid\":\"${CREATED_PROJECT}\"}" | extract_text)
 check "task in project" "$(has_uuid "$PROJ" "$CREATED_TASK")" "true"
@@ -212,6 +230,8 @@ echo ""
 echo "--- Cleanup ---"
 mcp_call "things_trash_task" "{\"uuid\":\"${CREATED_TASK}\"}" > /dev/null 2>&1 && echo "    Trashed task"
 mcp_call "things_trash_task" "{\"uuid\":\"${CREATED_PROJECT}\"}" > /dev/null 2>&1 && echo "    Trashed project"
+[ -n "$SUBTASK" ] && mcp_call "things_trash_task" "{\"uuid\":\"${SUBTASK}\"}" > /dev/null 2>&1 && echo "    Trashed subtask"
+[ -n "$ORPHAN_TASK" ] && mcp_call "things_trash_task" "{\"uuid\":\"${ORPHAN_TASK}\"}" > /dev/null 2>&1 && echo "    Trashed orphan task"
 [ -n "$REPEAT_TASK" ] && mcp_call "things_trash_task" "{\"uuid\":\"${REPEAT_TASK}\"}" > /dev/null 2>&1 && echo "    Trashed repeat daily task"
 [ -n "$REPEAT_AC_TASK" ] && mcp_call "things_trash_task" "{\"uuid\":\"${REPEAT_AC_TASK}\"}" > /dev/null 2>&1 && echo "    Trashed repeat-ac task"
 [ -n "$REPEAT_2W_TASK" ] && mcp_call "things_trash_task" "{\"uuid\":\"${REPEAT_2W_TASK}\"}" > /dev/null 2>&1 && echo "    Trashed every-2-weeks task"
