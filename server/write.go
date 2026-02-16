@@ -212,10 +212,11 @@ func (u *taskUpdate) build() map[string]any {
 type CreateTaskRequest struct {
 	Title    string `json:"title"`
 	Note     string `json:"note,omitempty"`
-	When     string `json:"when,omitempty"`     // today, anytime, someday, inbox
+	When     string `json:"when,omitempty"`     // today, anytime, someday, inbox, YYYY-MM-DD
 	Deadline string `json:"deadline,omitempty"` // YYYY-MM-DD
 	Project  string `json:"project,omitempty"`  // project UUID
 	Tags     string `json:"tags,omitempty"`     // comma-separated tag UUIDs
+	Repeat   string `json:"repeat,omitempty"`   // daily, weekly, monthly, yearly, every N days/weeks/months/years
 }
 
 // EditTaskRequest is the JSON body for POST /api/tasks/edit.
@@ -227,11 +228,106 @@ type EditTaskRequest struct {
 	Deadline string `json:"deadline,omitempty"`
 	Project  string `json:"project,omitempty"`
 	Tags     string `json:"tags,omitempty"`
+	Repeat   string `json:"repeat,omitempty"` // daily, weekly, monthly, yearly, every N days/weeks/months/years, none
 }
 
 // UUIDRequest is the JSON body for complete/trash endpoints.
 type UUIDRequest struct {
 	UUID string `json:"uuid"`
+}
+
+// ---------------------------------------------------------------------------
+// Repeat rule builder
+// ---------------------------------------------------------------------------
+
+// buildRepeatRule builds a RepeaterConfiguration JSON from a repeat string.
+// Formats: "daily", "weekly", "monthly", "yearly", "every N days/weeks/months/years"
+// Append " after completion" for repeat-after-completion mode (tp=1).
+// Returns nil if repeat is empty.
+func buildRepeatRule(repeat string, refDate time.Time) (*json.RawMessage, error) {
+	if repeat == "" || repeat == "none" {
+		return nil, nil
+	}
+
+	s := strings.ToLower(strings.TrimSpace(repeat))
+
+	afterCompletion := 0
+	if strings.HasSuffix(s, " after completion") {
+		afterCompletion = 1
+		s = strings.TrimSpace(strings.TrimSuffix(s, " after completion"))
+	}
+
+	var fu int64
+	var fa int64 = 1
+
+	switch s {
+	case "daily", "every day":
+		fu = 16
+	case "weekly", "every week":
+		fu = 256
+	case "monthly", "every month":
+		fu = 8
+	case "yearly", "every year":
+		fu = 4
+	default:
+		// Try "every N unit(s)" pattern
+		var n int
+		var unit string
+		if _, err := fmt.Sscanf(s, "every %d %s", &n, &unit); err == nil && n > 0 {
+			fa = int64(n)
+			unit = strings.TrimSuffix(unit, "s")
+			switch unit {
+			case "day":
+				fu = 16
+			case "week":
+				fu = 256
+			case "month":
+				fu = 8
+			case "year":
+				fu = 4
+			default:
+				return nil, fmt.Errorf("unknown repeat unit: %s", unit)
+			}
+		} else {
+			return nil, fmt.Errorf("unrecognized repeat format: %s", repeat)
+		}
+	}
+
+	ref := time.Date(refDate.Year(), refDate.Month(), refDate.Day(), 0, 0, 0, 0, time.UTC)
+	srTs := ref.Unix()
+
+	// Build detail config based on frequency
+	var of []map[string]any
+	switch fu {
+	case 16: // daily
+		of = []map[string]any{{"dy": 0}}
+	case 256: // weekly — repeat on ref date's weekday
+		of = []map[string]any{{"wd": int(ref.Weekday())}}
+	case 8: // monthly — repeat on ref date's day of month (0-indexed)
+		of = []map[string]any{{"dy": ref.Day() - 1}}
+	case 4: // yearly — repeat on ref date's month+day (0-indexed)
+		of = []map[string]any{{"dy": ref.Day() - 1, "mo": int(ref.Month()) - 1}}
+	}
+
+	config := map[string]any{
+		"ia":  srTs,
+		"rrv": 4,
+		"tp":  afterCompletion,
+		"of":  of,
+		"fu":  fu,
+		"sr":  srTs,
+		"fa":  fa,
+		"rc":  0,
+		"ts":  0,
+		"ed":  64092211200, // year 4001 = neverending
+	}
+
+	b, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("marshal repeat config: %w", err)
+	}
+	raw := json.RawMessage(b)
+	return &raw, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -329,6 +425,20 @@ func createTask(req CreateTaskRequest) (string, error) {
 		nt = textNote(req.Note)
 	}
 
+	// Build repeat rule if specified
+	var rr *json.RawMessage
+	if req.Repeat != "" {
+		refDate := time.Now()
+		if sr != nil {
+			refDate = time.Unix(*sr, 0)
+		}
+		var err error
+		rr, err = buildRepeatRule(req.Repeat, refDate)
+		if err != nil {
+			return "", fmt.Errorf("invalid repeat: %w", err)
+		}
+	}
+
 	payload := taskCreatePayload{
 		Tp: 0, Sr: sr, Dds: nil, Rt: []string{}, Rmd: nil,
 		Ss: 0, Tr: false, Dl: []string{}, Icp: false, St: st,
@@ -336,7 +446,7 @@ func createTask(req CreateTaskRequest) (string, error) {
 		Tg: tg, Agr: []string{}, Ix: 0, Cd: now, Lt: false,
 		Icc: 0, Md: nil, Ti: 0, Dd: dd, Ato: nil, Nt: nt,
 		Icsd: nil, Pr: pr, Rp: nil, Acrd: nil, Sp: nil,
-		Sb: 0, Rr: nil, Xx: defaultExtension(),
+		Sb: 0, Rr: rr, Xx: defaultExtension(),
 	}
 
 	env := writeEnvelope{id: taskUUID, action: 0, kind: "Task6", payload: payload}
@@ -397,6 +507,16 @@ func editTask(req EditTaskRequest) error {
 	}
 	if req.Tags != "" {
 		u.tags(strings.Split(req.Tags, ","))
+	}
+	if req.Repeat == "none" {
+		u.fields["rr"] = nil
+	} else if req.Repeat != "" {
+		refDate := time.Now()
+		rr, err := buildRepeatRule(req.Repeat, refDate)
+		if err != nil {
+			return fmt.Errorf("invalid repeat: %w", err)
+		}
+		u.fields["rr"] = rr
 	}
 	env := writeEnvelope{id: req.UUID, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {

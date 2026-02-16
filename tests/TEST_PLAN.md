@@ -59,7 +59,7 @@ Leaves no residual data — the test task is trashed at the end.
 
 ## 2. MCP Full Write Tools (`test-mcp.sh`)
 
-**Status: Implemented — 23/23 passing**
+**Status: Implemented — 28/28 passing**
 
 Each cycle creates test entities with a `[test-NNN]` prefix, runs checks, then cleans up.
 
@@ -86,35 +86,45 @@ Each cycle creates test entities with a `[test-NNN]` prefix, runs checks, then c
 |---|------|-------|
 | 8 | `things_edit_task` | Response status=updated; re-get confirms new title |
 
+### Repeat
+
+| # | Tool | Check |
+|---|------|-------|
+| 9 | `things_create_task` | Create with repeat=daily; UUID returned |
+| 10 | `things_create_task` | Create with repeat=weekly after completion; UUID returned |
+| 11 | `things_create_task` | Create with repeat=every 2 weeks; UUID returned |
+| 12 | `things_edit_task` | Add repeat=monthly to existing task; status=updated |
+| 13 | `things_edit_task` | Clear repeat with repeat=none; status=updated |
+
 ### Move
 
 | # | Tool | Check |
 |---|------|-------|
-| 9 | `things_move_to_someday` | status=moved_to_someday |
-| 10 | `things_move_to_anytime` | status=moved_to_anytime |
-| 11 | `things_move_to_inbox` | status=moved_to_inbox |
-| 12 | `things_move_to_today` | status=moved_to_today |
+| 14 | `things_move_to_someday` | status=moved_to_someday |
+| 15 | `things_move_to_anytime` | status=moved_to_anytime |
+| 16 | `things_move_to_inbox` | status=moved_to_inbox |
+| 17 | `things_move_to_today` | status=moved_to_today |
 
 ### Complete / Uncomplete
 
 | # | Tool | Check |
 |---|------|-------|
-| 13 | `things_complete_task` | Response status=completed; re-get confirms status=completed |
-| 14 | `things_uncomplete_task` | Response status=uncompleted; re-get confirms status=open |
+| 18 | `things_complete_task` | Response status=completed; re-get confirms status=completed |
+| 19 | `things_uncomplete_task` | Response status=uncompleted; re-get confirms status=open |
 
 ### Trash / Untrash
 
 | # | Tool | Check |
 |---|------|-------|
-| 15 | `things_trash_task` | status=trashed |
-| 16 | `things_untrash_task` | status=restored |
+| 20 | `things_trash_task` | status=trashed |
+| 21 | `things_untrash_task` | status=restored |
 
 ### List verification
 
 | # | Tool | Check |
 |---|------|-------|
-| 17 | `things_list_today` | Created task UUID appears in results |
-| 18 | `things_list_project_tasks` | Created task UUID appears in results |
+| 22 | `things_list_today` | Created task UUID appears in results |
+| 23 | `things_list_project_tasks` | Created task UUID appears in results |
 
 ### Cleanup
 

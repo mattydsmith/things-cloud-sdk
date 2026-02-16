@@ -299,6 +299,7 @@ func mcpCreateTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolRes
 		Deadline: req.GetString("deadline", ""),
 		Project:  req.GetString("project", ""),
 		Tags:     req.GetString("tags", ""),
+		Repeat:   req.GetString("repeat", ""),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -330,6 +331,7 @@ func mcpEditTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 		Deadline: req.GetString("deadline", ""),
 		Project:  req.GetString("project", ""),
 		Tags:     req.GetString("tags", ""),
+		Repeat:   req.GetString("repeat", ""),
 	}); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -808,6 +810,9 @@ func newMCPHandler() http.Handler {
 		mcp.WithString("tags",
 			mcp.Description("Comma-separated tag UUIDs"),
 		),
+		mcp.WithString("repeat",
+			mcp.Description("Recurrence rule. Accepts: 'daily', 'weekly', 'monthly', 'yearly', or 'every N days/weeks/months/years'. Append ' after completion' for repeat-after-completion mode (e.g. 'daily after completion'). Weekly defaults to the current weekday, monthly to the current day of month."),
+		),
 	), mcpCreateTask)
 
 	s.AddTool(mcp.NewTool("things_complete_task",
@@ -841,6 +846,9 @@ func newMCPHandler() http.Handler {
 		),
 		mcp.WithString("tags",
 			mcp.Description("New comma-separated tag UUIDs (replaces existing)"),
+		),
+		mcp.WithString("repeat",
+			mcp.Description("Recurrence rule. Accepts: 'daily', 'weekly', 'monthly', 'yearly', 'every N days/weeks/months/years', or 'none' to clear. Append ' after completion' for repeat-after-completion mode."),
 		),
 	), mcpEditTask)
 

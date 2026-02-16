@@ -13,8 +13,8 @@ No way to see recently completed tasks. Add a `things_list_completed` tool that 
 
 ## Lower Priority
 
-### Add recurring task support
-The SDK supports repeat rules (daily/weekly/monthly/yearly with end conditions) but MCP tools don't expose them. Add recurrence params to `things_create_task` and `things_edit_task`.
+### ~~Add recurring task support~~ (Done)
+Added `repeat` parameter to `things_create_task` and `things_edit_task`. Supports: daily, weekly, monthly, yearly, every N days/weeks/months/years, after completion mode, and "none" to clear.
 
 ### Investigate tag/area deletion via Tombstone2
 Areas and tags can't currently be deleted. The SDK supports `Tombstone2` entities for explicit deletion — test if writing a Tombstone2 for a tag/area UUID actually deletes it.

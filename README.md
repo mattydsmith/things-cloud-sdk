@@ -94,12 +94,12 @@ The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontext
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
-| `things_create_task` | Create a task | `title` (req), `note`, `when`, `deadline`, `project`, `tags` |
+| `things_create_task` | Create a task | `title` (req), `note`, `when`, `deadline`, `project`, `tags`, `repeat` |
 | `things_create_project` | Create a project | `title` (req), `note`, `when`, `deadline`, `area` |
 | `things_create_heading` | Create a heading in a project | `title` (req), `project` |
 | `things_create_area` | Create an area | `title` (req), `tags` |
 | `things_create_tag` | Create a tag | `title` (req), `shorthand`, `parent` |
-| `things_edit_task` | Edit a task | `uuid` (req), `title`, `note`, `when`, `deadline`, `project`, `tags` |
+| `things_edit_task` | Edit a task | `uuid` (req), `title`, `note`, `when`, `deadline`, `project`, `tags`, `repeat` |
 | `things_complete_task` | Complete a task | `uuid` |
 | `things_uncomplete_task` | Reopen a completed task | `uuid` |
 | `things_trash_task` | Move to trash | `uuid` |
@@ -166,13 +166,13 @@ All `/api/*` endpoints require `Authorization: Bearer <API_KEY>` when `API_KEY` 
 
 ## Testing
 
-92 integration tests across 5 test suites, all running against the live deployment.
+97 integration tests across 5 test suites, all running against the live deployment.
 
 ```bash
 # Daily smoke test (11 checks, ~15s) — core read/write workflow
 ./tests/test-smoke.sh
 
-# Full MCP write tools (23 checks, ~45s) — all write operations end-to-end
+# Full MCP write tools (28 checks, ~55s) — all write operations end-to-end
 ./tests/test-mcp.sh 010
 
 # MCP read tools (29 checks, ~30s) — all read-only tools
