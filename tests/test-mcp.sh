@@ -168,27 +168,53 @@ ORPHAN_TASK=$(field "$RESP2" uuid)
 RESP=$(mcp_call "things_edit_task" "{\"uuid\":\"${ORPHAN_TASK}\",\"parent_task\":\"${CREATED_TASK}\"}" | extract_text)
 check "set parent ok" "$(field "$RESP" status)" "updated"
 
-# 17. Move to someday
+# 17. Create checklist item
+echo "--- Create Checklist Item ---"
+RESP=$(mcp_call "things_create_checklist_item" "{\"title\":\"${PREFIX} Checklist Item\",\"task_uuid\":\"${CREATED_TASK}\"}" | extract_text)
+CREATED_CHECKLIST=$(field "$RESP" uuid)
+check "checklist item created" "$([ -n "$CREATED_CHECKLIST" ] && echo ok || echo '')" "ok"
+
+# 18. List checklist items
+echo "--- List Checklist Items ---"
+CLIST=$(mcp_call "things_list_checklist_items" "{\"task_uuid\":\"${CREATED_TASK}\"}" | extract_text)
+check "checklist item in list" "$(has_uuid "$CLIST" "$CREATED_CHECKLIST")" "true"
+
+# 19. Complete checklist item
+echo "--- Complete Checklist Item ---"
+RESP=$(mcp_call "things_complete_checklist_item" "{\"uuid\":\"${CREATED_CHECKLIST}\"}" | extract_text)
+check "checklist complete ok" "$(field "$RESP" status)" "completed"
+
+# 20. Uncomplete checklist item
+echo "--- Uncomplete Checklist Item ---"
+RESP=$(mcp_call "things_uncomplete_checklist_item" "{\"uuid\":\"${CREATED_CHECKLIST}\"}" | extract_text)
+check "checklist uncomplete ok" "$(field "$RESP" status)" "uncompleted"
+
+# 21. Delete checklist item
+echo "--- Delete Checklist Item ---"
+RESP=$(mcp_call "things_delete_checklist_item" "{\"uuid\":\"${CREATED_CHECKLIST}\"}" | extract_text)
+check "checklist delete ok" "$(field "$RESP" status)" "deleted"
+
+# 22. Move to someday
 echo "--- Move to Someday ---"
 RESP=$(mcp_call "things_move_to_someday" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to someday" "$(field "$RESP" status)" "moved_to_someday"
 
-# 18. Move to anytime
+# 23. Move to anytime
 echo "--- Move to Anytime ---"
 RESP=$(mcp_call "things_move_to_anytime" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to anytime" "$(field "$RESP" status)" "moved_to_anytime"
 
-# 19. Move to inbox
+# 24. Move to inbox
 echo "--- Move to Inbox ---"
 RESP=$(mcp_call "things_move_to_inbox" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to inbox" "$(field "$RESP" status)" "moved_to_inbox"
 
-# 20. Move to today
+# 25. Move to today
 echo "--- Move to Today ---"
 RESP=$(mcp_call "things_move_to_today" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "move to today" "$(field "$RESP" status)" "moved_to_today"
 
-# 21. Complete task
+# 26. Complete task
 echo "--- Complete Task ---"
 RESP=$(mcp_call "things_complete_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "complete ok" "$(field "$RESP" status)" "completed"
@@ -196,7 +222,7 @@ check "complete ok" "$(field "$RESP" status)" "completed"
 TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "status is completed" "$(field "$TASK" status)" "completed"
 
-# 22. Uncomplete task
+# 27. Uncomplete task
 echo "--- Uncomplete Task ---"
 RESP=$(mcp_call "things_uncomplete_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "uncomplete ok" "$(field "$RESP" status)" "uncompleted"
@@ -204,22 +230,22 @@ check "uncomplete ok" "$(field "$RESP" status)" "uncompleted"
 TASK=$(mcp_call "things_get_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "status is open again" "$(field "$TASK" status)" "open"
 
-# 23. Trash task
+# 28. Trash task
 echo "--- Trash Task ---"
 RESP=$(mcp_call "things_trash_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "trash ok" "$(field "$RESP" status)" "trashed"
 
-# 24. Untrash task
+# 29. Untrash task
 echo "--- Untrash Task ---"
 RESP=$(mcp_call "things_untrash_task" "{\"uuid\":\"${CREATED_TASK}\"}" | extract_text)
 check "untrash ok" "$(field "$RESP" status)" "restored"
 
-# 25. List today — verify task appears
+# 30. List today — verify task appears
 echo "--- List Today ---"
 TODAY=$(mcp_call "things_list_today" "{}" | extract_text)
 check "task in today" "$(has_uuid "$TODAY" "$CREATED_TASK")" "true"
 
-# 26. List project tasks
+# 31. List project tasks
 echo "--- List Project Tasks ---"
 PROJ=$(mcp_call "things_list_project_tasks" "{\"project_uuid\":\"${CREATED_PROJECT}\"}" | extract_text)
 check "task in project" "$(has_uuid "$PROJ" "$CREATED_TASK")" "true"

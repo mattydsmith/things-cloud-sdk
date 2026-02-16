@@ -202,13 +202,13 @@ All `/api/*` endpoints require `Authorization: Bearer <API_KEY>` when `API_KEY` 
 
 ## Testing
 
-100 integration tests across 5 test suites, all running against the live deployment.
+105 integration tests across 5 test suites, all running against the live deployment.
 
 ```bash
 # Daily smoke test (11 checks, ~15s) — core read/write workflow
 ./tests/test-smoke.sh
 
-# Full MCP write tools (31 checks, ~60s) — all write operations end-to-end
+# Full MCP write tools (36 checks, ~60s) — all write operations end-to-end
 ./tests/test-mcp.sh 010
 
 # MCP read tools (29 checks, ~30s) — all read-only tools

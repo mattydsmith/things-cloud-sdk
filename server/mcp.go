@@ -754,7 +754,7 @@ func newMCPHandler() http.Handler {
 	), mcpListAreaTasks)
 
 	s.AddTool(mcp.NewTool("things_list_checklist_items",
-		mcp.WithDescription("List checklist items for a specific Things task"),
+		mcp.WithDescription("List checklist items (lightweight checkboxes) within a task. These are different from subtasks — checklist items live inside the task's detail view and cannot have their own dates, tags, or notes. Use things_list_project_tasks with the task UUID to find subtasks instead."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("task_uuid",
 			mcp.Required(),
@@ -810,7 +810,7 @@ func newMCPHandler() http.Handler {
 			mcp.Description("Project UUID to add the task to"),
 		),
 		mcp.WithString("parent_task",
-			mcp.Description("Parent task UUID to create this as a subtask. Takes precedence over project."),
+			mcp.Description("Parent task UUID to create this as a subtask — a full nested task with its own dates, tags, and notes. For simple checkboxes within a task, use things_create_checklist_item instead. Takes precedence over project."),
 		),
 		mcp.WithString("tags",
 			mcp.Description("Comma-separated tag UUIDs"),
@@ -988,7 +988,7 @@ func newMCPHandler() http.Handler {
 	// --- Checklist item tools ---
 
 	s.AddTool(mcp.NewTool("things_create_checklist_item",
-		mcp.WithDescription("Add a checklist item to a Things task"),
+		mcp.WithDescription("Add a checklist item (lightweight checkbox) to a task. Checklist items are simple checkboxes within a task's detail view — they cannot have their own dates, tags, or notes. For full nested tasks with independent scheduling, use things_create_task with parent_task instead."),
 		mcp.WithString("title",
 			mcp.Required(),
 			mcp.Description("Checklist item text"),
@@ -1000,7 +1000,7 @@ func newMCPHandler() http.Handler {
 	), mcpCreateChecklistItem)
 
 	s.AddTool(mcp.NewTool("things_complete_checklist_item",
-		mcp.WithDescription("Mark a checklist item as completed"),
+		mcp.WithDescription("Mark a checklist item (checkbox) as completed"),
 		mcp.WithString("uuid",
 			mcp.Required(),
 			mcp.Description("UUID of the checklist item to complete"),
@@ -1008,7 +1008,7 @@ func newMCPHandler() http.Handler {
 	), mcpCompleteChecklistItem)
 
 	s.AddTool(mcp.NewTool("things_uncomplete_checklist_item",
-		mcp.WithDescription("Mark a completed checklist item as open again"),
+		mcp.WithDescription("Mark a completed checklist item (checkbox) as open again"),
 		mcp.WithString("uuid",
 			mcp.Required(),
 			mcp.Description("UUID of the checklist item to uncomplete"),
@@ -1016,7 +1016,7 @@ func newMCPHandler() http.Handler {
 	), mcpUncompleteChecklistItem)
 
 	s.AddTool(mcp.NewTool("things_delete_checklist_item",
-		mcp.WithDescription("Delete a checklist item"),
+		mcp.WithDescription("Delete a checklist item (checkbox) from a task"),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("uuid",
 			mcp.Required(),
