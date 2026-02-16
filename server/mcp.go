@@ -440,6 +440,18 @@ func mcpCreateTag(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 	return writeResult(map[string]string{"status": "created", "uuid": uuid, "title": title}), nil
 }
 
+func mcpCreateHeading(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	title, err := req.RequireString("title")
+	if err != nil {
+		return mcp.NewToolResultError("title is required"), nil
+	}
+	uuid, err := createHeading(title, req.GetString("project", ""))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "created", "uuid": uuid, "title": title}), nil
+}
+
 func mcpCreateProject(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	title, err := req.RequireString("title")
 	if err != nil {
@@ -693,6 +705,17 @@ func newMCPHandler() http.Handler {
 			mcp.Description("Parent tag UUID for nesting"),
 		),
 	), mcpCreateTag)
+
+	s.AddTool(mcp.NewTool("things_create_heading",
+		mcp.WithDescription("Create a heading within a project in Things"),
+		mcp.WithString("title",
+			mcp.Required(),
+			mcp.Description("Heading title"),
+		),
+		mcp.WithString("project",
+			mcp.Description("Project UUID to add the heading to"),
+		),
+	), mcpCreateHeading)
 
 	s.AddTool(mcp.NewTool("things_create_project",
 		mcp.WithDescription("Create a new project in Things"),

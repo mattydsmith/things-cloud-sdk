@@ -1,0 +1,33 @@
+2026-02-16 21:01:56 UTC  test-mcp  cycle=009  FAIL  1 passed, 22 failed
+    FAIL  tag created (got: , want: ok)
+    FAIL  area created (got: , want: ok)
+    FAIL  project created (got: , want: ok)
+    FAIL  task created (got: , want: ok)
+    FAIL  title matches (got: , want: [test-009] Task)
+    FAIL  status is open (got: , want: open)
+    FAIL  area title (got: , want: [test-009] Area)
+    FAIL  tag title (got: , want: [test-009] Tag)
+    FAIL  edit ok (got: , want: updated)
+    FAIL  title updated (got: , want: [test-009] Task (edited))
+    FAIL  move to someday (got: , want: moved_to_someday)
+    FAIL  move to anytime (got: , want: moved_to_anytime)
+    FAIL  move to inbox (got: , want: moved_to_inbox)
+    FAIL  move to today (got: , want: moved_to_today)
+    FAIL  complete ok (got: , want: completed)
+    FAIL  status is completed (got: , want: completed)
+    FAIL  uncomplete ok (got: , want: uncompleted)
+    FAIL  status is open again (got: , want: open)
+    FAIL  trash ok (got: , want: trashed)
+    FAIL  untrash ok (got: , want: restored)
+    FAIL  task in today (got: false, want: true)
+    FAIL  task in project (got: false, want: true)
+2026-02-16 21:03:40 UTC  test-mcp  cycle=009  PASS  23 passed, 0 failed
+2026-02-16 21:10:23 UTC  test-smoke  PASS  11 passed, 0 failed
+2026-02-16 21:13:17 UTC  test-mcp-protocol  PASS  11 passed, 0 failed
+2026-02-16 21:13:26 UTC  test-mcp-read  PASS  29 passed, 0 failed
+2026-02-16 21:14:02 UTC  test-api  FAIL  17 passed, 1 failed
+    FAIL  inbox returns array (got: false, want: true)
+2026-02-16 21:16:47 UTC  test-mcp-protocol  PASS  11 passed, 0 failed
+2026-02-16 21:17:00 UTC  test-mcp-read  PASS  29 passed, 0 failed
+2026-02-16 21:17:14 UTC  test-api  PASS  18 passed, 0 failed
+2026-02-16 21:28:15 UTC  test-smoke  PASS  11 passed, 0 failed

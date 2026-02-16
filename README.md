@@ -344,10 +344,27 @@ See `docs/client-side-bugs.md` for the full investigation and crash analysis.
 
 The SDK models all changes as immutable Items (events). A History is a sync stream identified by a UUID. The client pushes/pulls Items through Histories, inspired by [operational transformations and Git's internals](https://www.swift.org/blog/how-swifts-server-support-powers-things-cloud/).
 
+## API Server & MCP Endpoint
+
+The `server/` directory contains an HTTP server that exposes Things data via REST and MCP (Model Context Protocol). It runs on Fly.io and connects Claude directly to your Things task manager.
+
+```
+Things App ──▶ Things Cloud ◀── API Server (Fly.io)
+                                    ├── /api/*  (REST, Bearer auth)
+                                    └── /mcp    (MCP, Claude connector)
+```
+
+- **26 MCP tools** — full CRUD for tasks, projects, areas, tags, headings
+- **REST API** — read/write endpoints with Bearer token auth
+- **92 integration tests** across 5 test suites
+
+See [`server/README.md`](server/README.md) for full documentation including architecture, deployment, MCP tool reference, and testing.
+
 ## TODO
 
 - [ ] Repeat after completion
 - [x] Persistent state storage (see `sync` package)
+- [x] API server with REST and MCP endpoints (see `server/`)
 
 ## Note
 

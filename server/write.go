@@ -233,6 +233,26 @@ type UUIDRequest struct {
 // Core write operations (used by both HTTP handlers and MCP tools)
 // ---------------------------------------------------------------------------
 
+// historyWrite syncs the history to get the latest ancestor index, then writes.
+// If the write still fails with 409 (race with Things app), it retries once.
+func historyWrite(env writeEnvelope) error {
+	if err := history.Sync(); err != nil {
+		return fmt.Errorf("history sync failed: %w", err)
+	}
+	err := history.Write(env)
+	if err != nil && strings.Contains(err.Error(), "409") {
+		// Retry once — another client may have committed between our sync and write
+		if err2 := history.Sync(); err2 != nil {
+			return fmt.Errorf("history re-sync failed: %w", err2)
+		}
+		err = history.Write(env)
+	}
+	if err != nil {
+		return fmt.Errorf("write failed: %w", err)
+	}
+	return nil
+}
+
 func createTask(req CreateTaskRequest) (string, error) {
 	taskUUID := generateUUID()
 	now := nowTs()
@@ -291,8 +311,8 @@ func createTask(req CreateTaskRequest) (string, error) {
 	}
 
 	env := writeEnvelope{id: taskUUID, action: 0, kind: "Task6", payload: payload}
-	if err := history.Write(env); err != nil {
-		return "", fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return "", err
 	}
 	syncer.Sync()
 	return taskUUID, nil
@@ -302,8 +322,8 @@ func completeTask(uuid string) error {
 	ts := nowTs()
 	u := newTaskUpdate().status(3).stopDate(ts)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
-	if err := history.Write(env); err != nil {
-		return fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return err
 	}
 	syncer.Sync()
 	return nil
@@ -312,8 +332,8 @@ func completeTask(uuid string) error {
 func trashTask(uuid string) error {
 	u := newTaskUpdate().trash(true)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
-	if err := history.Write(env); err != nil {
-		return fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return err
 	}
 	syncer.Sync()
 	return nil
@@ -353,8 +373,8 @@ func editTask(req EditTaskRequest) error {
 		u.tags(strings.Split(req.Tags, ","))
 	}
 	env := writeEnvelope{id: req.UUID, action: 1, kind: "Task6", payload: u.build()}
-	if err := history.Write(env); err != nil {
-		return fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return err
 	}
 	syncer.Sync()
 	return nil
@@ -364,8 +384,8 @@ func moveTaskToToday(uuid string) error {
 	today := todayMidnightUTC()
 	u := newTaskUpdate().schedule(1, today, today)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
-	if err := history.Write(env); err != nil {
-		return fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return err
 	}
 	syncer.Sync()
 	return nil
@@ -374,8 +394,8 @@ func moveTaskToToday(uuid string) error {
 func moveTaskToAnytime(uuid string) error {
 	u := newTaskUpdate().schedule(1, nil, nil)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
-	if err := history.Write(env); err != nil {
-		return fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return err
 	}
 	syncer.Sync()
 	return nil
@@ -384,8 +404,8 @@ func moveTaskToAnytime(uuid string) error {
 func moveTaskToSomeday(uuid string) error {
 	u := newTaskUpdate().schedule(2, nil, nil)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
-	if err := history.Write(env); err != nil {
-		return fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return err
 	}
 	syncer.Sync()
 	return nil
@@ -394,8 +414,8 @@ func moveTaskToSomeday(uuid string) error {
 func moveTaskToInbox(uuid string) error {
 	u := newTaskUpdate().schedule(0, nil, nil)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
-	if err := history.Write(env); err != nil {
-		return fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return err
 	}
 	syncer.Sync()
 	return nil
@@ -404,8 +424,8 @@ func moveTaskToInbox(uuid string) error {
 func uncompleteTask(uuid string) error {
 	u := newTaskUpdate().status(0).stopDate(0)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
-	if err := history.Write(env); err != nil {
-		return fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return err
 	}
 	syncer.Sync()
 	return nil
@@ -414,8 +434,8 @@ func uncompleteTask(uuid string) error {
 func untrashTask(uuid string) error {
 	u := newTaskUpdate().trash(false)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
-	if err := history.Write(env); err != nil {
-		return fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return err
 	}
 	syncer.Sync()
 	return nil
@@ -432,8 +452,8 @@ func createArea(title string, tagUUIDs []string) (string, error) {
 		"tg": tagUUIDs,
 	}
 	env := writeEnvelope{id: areaUUID, action: 0, kind: "Area3", payload: payload}
-	if err := history.Write(env); err != nil {
-		return "", fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return "", err
 	}
 	syncer.Sync()
 	return areaUUID, nil
@@ -452,11 +472,38 @@ func createTag(title, shorthand, parentUUID string) (string, error) {
 		"pn": pn,
 	}
 	env := writeEnvelope{id: tagUUID, action: 0, kind: "Tag4", payload: payload}
-	if err := history.Write(env); err != nil {
-		return "", fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return "", err
 	}
 	syncer.Sync()
 	return tagUUID, nil
+}
+
+func createHeading(title, projectUUID string) (string, error) {
+	headingUUID := generateUUID()
+	now := nowTs()
+
+	pr := []string{}
+	if projectUUID != "" {
+		pr = []string{projectUUID}
+	}
+
+	payload := taskCreatePayload{
+		Tp: 2, Sr: nil, Dds: nil, Rt: []string{}, Rmd: nil,
+		Ss: 0, Tr: false, Dl: []string{}, Icp: false, St: 1,
+		Ar: []string{}, Tt: title, Do: 0, Lai: nil, Tir: nil,
+		Tg: []string{}, Agr: []string{}, Ix: 0, Cd: now, Lt: false,
+		Icc: 0, Md: nil, Ti: 0, Dd: nil, Ato: nil, Nt: emptyNote(),
+		Icsd: nil, Pr: pr, Rp: nil, Acrd: nil, Sp: nil,
+		Sb: 0, Rr: nil, Xx: defaultExtension(),
+	}
+
+	env := writeEnvelope{id: headingUUID, action: 0, kind: "Task6", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return "", err
+	}
+	syncer.Sync()
+	return headingUUID, nil
 }
 
 func createProject(title, note, when, deadline, areaUUID string) (string, error) {
@@ -507,8 +554,8 @@ func createProject(title, note, when, deadline, areaUUID string) (string, error)
 	}
 
 	env := writeEnvelope{id: projectUUID, action: 0, kind: "Task6", payload: payload}
-	if err := history.Write(env); err != nil {
-		return "", fmt.Errorf("write failed: %w", err)
+	if err := historyWrite(env); err != nil {
+		return "", err
 	}
 	syncer.Sync()
 	return projectUUID, nil

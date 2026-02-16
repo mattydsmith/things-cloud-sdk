@@ -9,9 +9,12 @@ CYCLE="${1:-001}"
 BASE="${2:-https://things-cloud-mttsmth.fly.dev}"
 PREFIX="[test-${CYCLE}]"
 ENDPOINT="${BASE}/mcp"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE="${SCRIPT_DIR}/test-results.log"
 
 PASS=0
 FAIL=0
+FAILURES=""
 CREATED_TASK=""
 CREATED_PROJECT=""
 CREATED_AREA=""
@@ -54,6 +57,7 @@ check() {
   else
     printf "  \033[31mFAIL\033[0m  %s (got: %s, want: %s)\n" "$label" "$got" "$want"
     FAIL=$((FAIL + 1))
+    FAILURES="${FAILURES}    FAIL  ${label} (got: ${got}, want: ${want})\n"
   fi
 }
 
@@ -182,11 +186,24 @@ mcp_call "things_trash_task" "{\"uuid\":\"${CREATED_TASK}\"}" > /dev/null 2>&1 &
 mcp_call "things_trash_task" "{\"uuid\":\"${CREATED_PROJECT}\"}" > /dev/null 2>&1 && echo "    Trashed project"
 echo "    Note: area '${CREATED_AREA}' and tag '${CREATED_TAG}' cannot be trashed via API"
 
-# --- summary ---
+# --- summary & log ---
+
+RESULT="PASS"
+if [ "$FAIL" -gt 0 ]; then
+  RESULT="FAIL"
+fi
 
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed (cycle ${CYCLE}) ==="
 echo ""
+
+# Append to log file
+{
+  echo "$(date -u '+%Y-%m-%d %H:%M:%S UTC')  test-mcp  cycle=${CYCLE}  ${RESULT}  ${PASS} passed, ${FAIL} failed"
+  if [ -n "$FAILURES" ]; then
+    printf "%b" "$FAILURES"
+  fi
+} >> "$LOG_FILE"
 
 if [ "$FAIL" -gt 0 ]; then
   exit 1

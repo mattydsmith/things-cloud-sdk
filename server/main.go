@@ -56,6 +56,10 @@ func handleInbox(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, fmt.Sprintf("failed to get inbox: %v", err), 500)
 		return
 	}
+	if tasks == nil {
+		jsonResponse(w, []*things.Task{})
+		return
+	}
 	jsonResponse(w, tasks)
 }
 
@@ -65,6 +69,10 @@ func handleToday(w http.ResponseWriter, r *http.Request) {
 	tasks, err := state.TasksInToday(sync.QueryOpts{})
 	if err != nil {
 		jsonError(w, fmt.Sprintf("failed to get today: %v", err), 500)
+		return
+	}
+	if tasks == nil {
+		jsonResponse(w, []*things.Task{})
 		return
 	}
 	jsonResponse(w, tasks)
@@ -78,6 +86,10 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, fmt.Sprintf("failed to get projects: %v", err), 500)
 		return
 	}
+	if projects == nil {
+		jsonResponse(w, []*things.Task{})
+		return
+	}
 	jsonResponse(w, projects)
 }
 
@@ -89,6 +101,10 @@ func handleAreas(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, fmt.Sprintf("failed to get areas: %v", err), 500)
 		return
 	}
+	if areas == nil {
+		jsonResponse(w, []*things.Area{})
+		return
+	}
 	jsonResponse(w, areas)
 }
 
@@ -98,6 +114,10 @@ func handleTags(w http.ResponseWriter, r *http.Request) {
 	tags, err := state.AllTags()
 	if err != nil {
 		jsonError(w, fmt.Sprintf("failed to get tags: %v", err), 500)
+		return
+	}
+	if tags == nil {
+		jsonResponse(w, []*things.Tag{})
 		return
 	}
 	jsonResponse(w, tags)
