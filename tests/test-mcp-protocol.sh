@@ -57,7 +57,7 @@ check "has tools capability" "$HAS_TOOLS" "true"
 echo "--- List Tools ---"
 RESP=$(mcp_raw '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
 TOOL_COUNT=$(echo "$RESP" | python3 -c "import sys,json; r=json.loads(sys.stdin.read()); print(len(r.get('result',{}).get('tools',[])))" 2>/dev/null || echo "0")
-check "tool count is 26" "$TOOL_COUNT" "26"
+check "tool count is 27" "$TOOL_COUNT" "27"
 
 # Verify a few key tools exist
 HAS_CREATE=$(echo "$RESP" | python3 -c "

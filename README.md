@@ -71,7 +71,7 @@ The server runs on [Fly.io](https://fly.io):
 
 The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontextprotocol.io/) using Streamable HTTP transport (JSON-RPC 2.0 over HTTP POST). No authentication — designed for use with Claude.ai custom connectors.
 
-### Tools (26)
+### Tools (27)
 
 #### Read tools
 
@@ -108,6 +108,12 @@ The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontext
 | `things_move_to_anytime` | Move to anytime | `uuid` |
 | `things_move_to_someday` | Move to someday | `uuid` |
 | `things_move_to_inbox` | Move to inbox | `uuid` |
+
+#### Diagnostic tools
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `things_smoke_test` | Run a smoke test: create, read, edit, complete, trash | — |
 
 ### Claude.ai setup
 

@@ -228,7 +228,7 @@ Tests the JSON-RPC protocol layer independently from tool logic.
 
 | # | Check |
 |---|-------|
-| 4 | Returns 26 tools |
+| 4 | Returns 27 tools |
 | 5 | Includes `things_create_task` |
 | 6 | Includes `things_list_today` |
 | 7 | Includes `things_create_heading` |
