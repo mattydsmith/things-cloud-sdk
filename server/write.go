@@ -185,6 +185,11 @@ func (u *taskUpdate) deadline(dd int64) *taskUpdate {
 	return u
 }
 
+func (u *taskUpdate) clearDeadline() *taskUpdate {
+	u.fields["dd"] = nil
+	return u
+}
+
 func (u *taskUpdate) project(uuid string) *taskUpdate {
 	u.fields["pr"] = []string{uuid}
 	return u
@@ -358,7 +363,9 @@ func editTask(req EditTaskRequest) error {
 	case "inbox":
 		u.schedule(0, nil, nil)
 	}
-	if req.Deadline != "" {
+	if req.Deadline == "none" {
+		u.clearDeadline()
+	} else if req.Deadline != "" {
 		if t, err := time.Parse("2006-01-02", req.Deadline); err == nil {
 			u.deadline(t.Unix())
 		}
