@@ -41,7 +41,7 @@ You can freely make changes in the Things app and immediately use the API/MCP to
 | Path | Purpose |
 |------|---------|
 | `server/main.go` | HTTP server, routing, auth middleware |
-| `server/mcp.go` | MCP server with 26 tool definitions and handlers |
+| `server/mcp.go` | MCP server with 32 tool definitions and handlers |
 | `server/write.go` | Write operations shared between REST and MCP |
 | `sync/` | Persistent SQLite sync engine with semantic change detection |
 
@@ -130,6 +130,42 @@ The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontext
 |------|-------------|------------|
 | `things_smoke_test` | Run a smoke test: create, read, edit, complete, trash | — |
 
+### Parameter reference
+
+#### `when` — Task scheduling
+
+Controls which Things view the task appears in. Use for most date-related requests.
+
+| Value | Effect |
+|-------|--------|
+| `today` | Today view (scheduled for today) |
+| `anytime` | Anytime view (triaged, no date) |
+| `someday` | Someday view (deferred) |
+| `inbox` | Inbox (default for new tasks) |
+| `none` | Strip dates without moving the task (edit only) |
+| `YYYY-MM-DD` | Future date → Upcoming view; today/past → Today view |
+
+#### `deadline` — Hard deadlines
+
+Only use when the user explicitly mentions a deadline. Most date requests should use `when`.
+
+| Value | Effect |
+|-------|--------|
+| `YYYY-MM-DD` | Set a hard deadline |
+| `none` | Clear an existing deadline (edit only) |
+
+#### `repeat` — Recurring tasks
+
+| Value | Effect |
+|-------|--------|
+| `daily` | Every day |
+| `weekly` | Every week (on the same weekday as the start date) |
+| `monthly` | Every month (on the same day of month) |
+| `yearly` | Every year (on the same date) |
+| `every N days/weeks/months/years` | Custom interval (e.g. `every 2 weeks`) |
+| `... after completion` | Append to any format for repeat-after-completion mode |
+| `none` | Clear recurrence (edit only) |
+
 ### Claude.ai setup
 
 1. Go to **Settings > Connectors > Add custom connector**
@@ -188,11 +224,12 @@ API_KEY=your-key ./tests/test-api.sh
 Results are appended to `tests/test-results.log`:
 
 ```
-2026-02-16 21:03:40 UTC  test-mcp    cycle=009  PASS  23 passed, 0 failed
-2026-02-16 21:10:23 UTC  test-smoke             PASS  11 passed, 0 failed
-2026-02-16 21:16:47 UTC  test-mcp-protocol      PASS  11 passed, 0 failed
-2026-02-16 21:17:00 UTC  test-mcp-read          PASS  29 passed, 0 failed
-2026-02-16 21:17:14 UTC  test-api               PASS  18 passed, 0 failed
+2026-02-16 21:03:40 UTC  test-mcp        cycle=009  PASS  23 passed, 0 failed
+2026-02-16 21:10:23 UTC  test-smoke                 PASS  11 passed, 0 failed
+2026-02-16 21:16:47 UTC  test-mcp-protocol          PASS  11 passed, 0 failed
+2026-02-16 21:17:00 UTC  test-mcp-read              PASS  29 passed, 0 failed
+2026-02-16 21:17:14 UTC  test-api                   PASS  18 passed, 0 failed
+2026-02-16 22:42:10 UTC  test-mcp        cycle=011  PASS  28 passed, 0 failed
 ```
 
 See [`tests/TEST_PLAN.md`](tests/TEST_PLAN.md) for check-by-check detail.
