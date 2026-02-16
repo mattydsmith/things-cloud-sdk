@@ -4,7 +4,7 @@
 #
 
 app = 'things-cloud-mttsmth'
-primary_region = 'iad'
+primary_region = 'lhr'
 
 [build]
 
