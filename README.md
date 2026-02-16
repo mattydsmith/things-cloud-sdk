@@ -1,372 +1,219 @@
-# things cloud sdk
+# Things Cloud
 
-[Things](https://culturedcode.com/things/) comes with a cloud based API, which can
-be used to synchronize data between devices.
-This is a golang SDK to interact with that API, opening the API so that you
-can enhance your Things experience on iOS and Mac.
+A Go server and SDK for the [Things 3](https://culturedcode.com/things/) cloud API. Exposes your Things tasks via REST and [MCP](https://modelcontextprotocol.io/) (Model Context Protocol), connecting Claude and other AI assistants directly to your task manager.
 
-[![Go](https://github.com/arthursoares/things-cloud-sdk/actions/workflows/go.yml/badge.svg)](https://github.com/arthursoares/things-cloud-sdk/actions/workflows/go.yml)
-
-## Getting Started
-
-### Installation
-
-```bash
-go get github.com/arthursoares/things-cloud-sdk
-```
-
-### Quick Start
-
-**1. Set up your credentials:**
-
-```bash
-export THINGS_USERNAME='your@email.com'
-export THINGS_PASSWORD='yourpassword'
-```
-
-**2. Create a simple Go program:**
-
-```go
-package main
-
-import (
-    "fmt"
-    "os"
-    things "github.com/arthursoares/things-cloud-sdk"
-)
-
-func main() {
-    client := things.New(
-        things.APIEndpoint,
-        os.Getenv("THINGS_USERNAME"),
-        os.Getenv("THINGS_PASSWORD"),
-    )
-
-    // Verify credentials
-    resp, err := client.Verify()
-    if err != nil {
-        panic(err)
-    }
-    fmt.Printf("✓ Connected: %s\n", resp.Email)
-
-    // Get or create a history
-    histories, _ := client.Histories()
-    var historyID string
-    if len(histories) > 0 {
-        historyID = histories[0].ID
-    } else {
-        hist, _ := client.CreateHistory()
-        historyID = hist.ID
-    }
-
-    // Create a task
-    task := things.Task{
-        UUID:  things.GenerateUUID(),
-        Title: things.String("My first task from the SDK!"),
-    }
-
-    items := []things.Item{things.NewCreateTaskItem(task)}
-    client.Write(historyID, items, -1)
-    fmt.Printf("✓ Created task: %s\n", *task.Title)
-}
-```
-
-**3. Run it:**
-
-```bash
-go run main.go
-```
-
-### CLI Quick Start
-
-Install and use the command-line tool:
-
-```bash
-# Install
-go install github.com/arthursoares/things-cloud-sdk/cmd/things-cli@latest
-
-# Create a task
-things-cli create "Buy groceries" --when today
-
-# List today's tasks
-things-cli list --today
-
-# Complete a task
-things-cli complete <task-uuid>
-```
-
-## Features
-
-- **Verify Credentials** — validate account access
-- **Account Management** — signup, confirmation, password change, deletion
-- **History Management** — list, create, delete, sync histories
-- **Item Read/Write** — full event-sourced CRUD for tasks, areas, tags, checklist items (supports batching multiple items in one request)
-- **Task Types** — tasks, projects, and headings (action groups within projects)
-- **Structured Notes** — full-text and delta patch support for task notes
-- **Recurring Tasks** — neverending, end on date, end after N times
-- **Tombstone Deletion** — explicit deletion records via `Tombstone2` entities
-- **Device Registration** — register app instances for APNS push notifications
-- **Alarm/Reminders** — alarm time offset support on tasks
-- **State Aggregation** — in-memory state built from history items, with queries for projects, headings, subtasks, areas, tags, and checklist items
-- **Persistent Sync Engine** — SQLite-backed incremental sync with semantic change detection
-
-## CLI
-
-`things-cli` is a command-line tool for interacting with Things Cloud directly.
-
-### Setup
-
-```bash
-export THINGS_USERNAME='your@email.com'
-export THINGS_PASSWORD='yourpassword'
-go build -o things-cli ./cmd/things-cli/
-```
-
-### Commands
-
-```bash
-# Read
-things-cli list [--today] [--inbox] [--area NAME] [--project NAME]
-things-cli show <uuid>
-things-cli areas
-things-cli projects
-things-cli tags
-
-# Create
-things-cli create "Title" [--note ...] [--when today|anytime|someday|inbox] \
-  [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD] \
-  [--project UUID] [--heading UUID] [--area UUID] \
-  [--tags UUID,...] [--type task|project|heading]
-things-cli create-area "Name"
-things-cli create-tag "Name" [--shorthand KEY] [--parent UUID]
-
-# Modify
-things-cli edit <uuid> [--title ...] [--note ...] [--when ...] [--deadline ...]
-things-cli complete <uuid>
-things-cli trash <uuid>
-things-cli purge <uuid>
-things-cli move-to-today <uuid>
-
-# Batch (all operations in one HTTP request - much faster!)
-echo '[{"cmd":"complete","uuid":"abc"},{"cmd":"trash","uuid":"def"}]' | things-cli batch
-```
-
-### Examples
-
-```bash
-# Create a project with tasks
-things-cli create "My Project" --type project --when anytime
-# → {"status":"created","uuid":"BXmAcvS6yK1eDhW31MuZrL","title":"My Project"}
-
-things-cli create "First Task" --project BXmAcvS6yK1eDhW31MuZrL --when today --note "Details here"
-
-# Create an area and assign tasks
-things-cli create-area "Work"
-things-cli create "Review PR" --area <area-uuid> --when today --deadline 2026-02-15
-
-# Batch operations (50 ops in ~2 sec instead of ~2-3 min)
-echo '[
-  {"cmd": "create", "title": "Task 1"},
-  {"cmd": "create", "title": "Task 2"},
-  {"cmd": "move-to-project", "uuid": "abc123", "project": "proj-uuid"},
-  {"cmd": "complete", "uuid": "def456"}
-]' | things-cli batch
-```
-
-## Advanced SDK Usage
-
-### Working with Histories and Items
-
-```go
-package main
-
-import (
-    "fmt"
-    "os"
-    things "github.com/arthursoares/things-cloud-sdk"
-)
-
-func main() {
-    client := things.New(
-        things.APIEndpoint,
-        os.Getenv("THINGS_USERNAME"),
-        os.Getenv("THINGS_PASSWORD"),
-    )
-
-    // Create a history
-    history, _ := client.CreateHistory()
-
-    // Create a project with tasks
-    project := things.Task{
-        UUID:     things.GenerateUUID(),
-        Title:    things.String("My Project"),
-        TaskType: things.TaskTypePtr(things.TaskTypeProject),
-        Status:   things.Status(things.TaskStatusPending),
-        Schedule: things.Schedule(things.TaskScheduleAnytime),
-    }
-
-    task1 := things.Task{
-        UUID:      things.GenerateUUID(),
-        Title:     things.String("First task"),
-        ProjectID: things.String(project.UUID),
-        Schedule:  things.Schedule(things.TaskScheduleAnytime),
-    }
-
-    task2 := things.Task{
-        UUID:      things.GenerateUUID(),
-        Title:     things.String("Second task"),
-        ProjectID: things.String(project.UUID),
-        Schedule:  things.Schedule(things.TaskScheduleAnytime),
-    }
-
-    // Write all items in one batch
-    items := []things.Item{
-        things.NewCreateTaskItem(project),
-        things.NewCreateTaskItem(task1),
-        things.NewCreateTaskItem(task2),
-    }
-
-    client.Write(history.ID, items, -1)
-    fmt.Println("✓ Created project with 2 tasks")
-}
-```
-
-See the `example/` directory for more complete examples including history sync, task creation, and state aggregation.
-
-## Persistent Sync Engine
-
-The `sync` package provides a SQLite-backed sync engine that tracks "what changed since last sync" — perfect for building agents, automations, or dashboards that react to Things changes.
-
-```go
-package main
-
-import (
-    "fmt"
-    "os"
-    things "github.com/arthursoares/things-cloud-sdk"
-    "github.com/arthursoares/things-cloud-sdk/sync"
-)
-
-func main() {
-    client := things.New(
-        things.APIEndpoint,
-        os.Getenv("THINGS_USERNAME"),
-        os.Getenv("THINGS_PASSWORD"),
-    )
-
-    // Open persistent sync database
-    syncer, _ := sync.Open("things.db", client)
-    defer syncer.Close()
-
-    // Fetch changes since last sync
-    changes, _ := syncer.Sync()
-
-    for _, c := range changes {
-        switch v := c.(type) {
-        case sync.TaskCreated:
-            fmt.Printf("New task: %s\n", v.Task.Title)
-        case sync.TaskCompleted:
-            fmt.Printf("Completed: %s\n", v.Task.Title)
-        case sync.TaskMovedToToday:
-            fmt.Printf("Moved to Today: %s\n", v.Task.Title)
-        }
-    }
-
-    // Query current state
-    state := syncer.State()
-    inbox, _ := state.TasksInInbox(sync.QueryOpts{})
-    projects, _ := state.AllProjects(sync.QueryOpts{})
-}
-```
-
-### Semantic Change Types
-
-The sync engine detects 40+ semantic change types:
-
-| Category | Changes |
-|----------|---------|
-| **Task Lifecycle** | `TaskCreated`, `TaskCompleted`, `TaskUncompleted`, `TaskTrashed`, `TaskDeleted` |
-| **Task Movement** | `TaskMovedToInbox`, `TaskMovedToToday`, `TaskMovedToAnytime`, `TaskMovedToSomeday`, `TaskMovedToUpcoming` |
-| **Task Organization** | `TaskMovedToProject`, `TaskMovedToArea`, `TaskMovedUnderHeading`, `TaskTagsChanged` |
-| **Task Details** | `TaskTitleChanged`, `TaskNoteChanged`, `TaskDeadlineSet`, `TaskDeadlineRemoved` |
-| **Projects** | `ProjectCreated`, `ProjectCompleted`, `ProjectTrashed`, `ProjectDeleted` |
-| **Areas & Tags** | `AreaCreated`, `AreaDeleted`, `TagCreated`, `TagDeleted` |
-| **Checklists** | `ChecklistItemCreated`, `ChecklistItemCompleted`, `ChecklistItemDeleted` |
-
-### State Queries
-
-```go
-state := syncer.State()
-
-// Query by location
-inbox, _ := state.TasksInInbox(sync.QueryOpts{})
-today, _ := state.TasksInToday(sync.QueryOpts{})
-anytime, _ := state.TasksInAnytime(sync.QueryOpts{})
-
-// Query by container
-tasks, _ := state.TasksInProject(projectUUID, sync.QueryOpts{})
-tasks, _ := state.TasksInArea(areaUUID, sync.QueryOpts{})
-
-// List all
-projects, _ := state.AllProjects(sync.QueryOpts{})
-areas, _ := state.AllAreas(sync.QueryOpts{})
-tags, _ := state.AllTags(sync.QueryOpts{})
-```
-
-### Change Log Queries
-
-```go
-// Changes in last hour
-changes, _ := syncer.ChangesSince(time.Now().Add(-1 * time.Hour))
-
-// Changes for a specific task
-changes, _ := syncer.ChangesForEntity(taskUUID)
-
-// Changes since server index
-changes, _ := syncer.ChangesSinceIndex(150)
-```
-
-## Wire Format Notes
-
-Key findings from reverse engineering the Things Cloud sync protocol:
-
-- **UUIDs must be Base58-encoded** (Bitcoin alphabet: `123456789ABCDEFGH...`). Standard UUID strings or other encodings will crash Things.app during sync.
-- **`md` (modification date) must be `null` on creates.** Set timestamps only on updates.
-- **Schedule field (`st`)**: `0` = Inbox, `1` = Anytime/Today (with `sr`/`tir` dates = Today), `2` = Someday/Upcoming (with dates = Upcoming).
-- **Status field (`ss`)**: `0` = Pending, `2` = Canceled, `3` = Completed. Don't confuse with `st` (schedule)!
-- **Headings (`tp=2`) must have `st=1`** (anytime). `st=0` (inbox) crashes Things.app.
-- **Tasks in projects, headings, or areas** should default to `st=1` (anytime) — they've been triaged out of inbox.
-- **Kind strings**: `Task6`, `Tag4`, `ChecklistItem3`, `Area3`, `Tombstone2`
-
-See `docs/client-side-bugs.md` for the full investigation and crash analysis.
+Built on a reverse-engineered, unofficial SDK — there is no official API documentation from Cultured Code.
 
 ## Architecture
 
-The SDK models all changes as immutable Items (events). A History is a sync stream identified by a UUID. The client pushes/pulls Items through Histories, inspired by [operational transformations and Git's internals](https://www.swift.org/blog/how-swifts-server-support-powers-things-cloud/).
+```
+┌──────────────┐     ┌──────────────────┐     ┌──────────────┐
+│  Things App  │────▶│  Things Cloud    │◀────│  API Server  │
+│  (Mac/iOS)   │     │  (Cultured Code) │     │  (Fly.io)    │
+└──────────────┘     └──────────────────┘     └──────┬───────┘
+                                                     │
+                                              ┌──────┴───────┐
+                                              │              │
+                                         /api/*         /mcp
+                                        REST API    MCP Endpoint
+                                              │              │
+                                         curl/apps    Claude.ai
+                                                     Connector
+```
 
-## API Server & MCP Endpoint
+The server syncs task data from Things Cloud into a local SQLite database and exposes it through two interfaces:
 
-The `server/` directory contains an HTTP server that exposes Things data via REST and MCP (Model Context Protocol). It runs on Fly.io and connects Claude directly to your Things task manager.
+- **REST API** (`/api/*`) — Bearer token auth, for scripts and apps
+- **MCP Endpoint** (`/mcp`) — Streamable HTTP (JSON-RPC 2.0), for AI assistants like Claude
+
+### Sync model
+
+The server maintains two sync channels with Things Cloud:
+
+1. **Read sync** (`sync.Syncer`) — SQLite-backed incremental sync that pulls task state. Called before every read to ensure fresh data.
+
+2. **Write sync** (`things.History`) — Event-sourced write channel using Things Cloud's history API. Each write syncs the history first to get the latest ancestor index, then commits. Retries once on 409 conflict (race with the Things app).
+
+You can freely make changes in the Things app and immediately use the API/MCP tools — no server restart required.
+
+### Key files
+
+| Path | Purpose |
+|------|---------|
+| `server/main.go` | HTTP server, routing, auth middleware |
+| `server/mcp.go` | MCP server with 26 tool definitions and handlers |
+| `server/write.go` | Write operations shared between REST and MCP |
+| `sync/` | Persistent SQLite sync engine with semantic change detection |
+
+## Infrastructure
+
+The server runs on [Fly.io](https://fly.io):
+
+| Component | Detail |
+|-----------|--------|
+| **Region** | `lhr` (London) |
+| **VM** | Shared CPU, 1 GB RAM |
+| **Storage** | Persistent volume at `/data` (SQLite WAL mode) |
+| **Container** | Multi-stage Alpine build, ~14 MB image |
+| **Auto-scaling** | Scales to zero when idle, auto-starts on request |
+| **URL** | `https://things-cloud-mttsmth.fly.dev` |
+
+### Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `THINGS_USERNAME` | Yes | Things account email |
+| `THINGS_PASSWORD` | Yes | Things account password |
+| `API_KEY` | No | Bearer token for `/api/*` endpoints. If unset, no auth. |
+| `PORT` | No | Server port (default: `8080`) |
+
+## MCP Endpoint
+
+The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontextprotocol.io/) using Streamable HTTP transport (JSON-RPC 2.0 over HTTP POST). No authentication — designed for use with Claude.ai custom connectors.
+
+### Tools (26)
+
+#### Read tools
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `things_list_today` | Tasks scheduled for today | — |
+| `things_list_inbox` | Tasks in the inbox | — |
+| `things_list_all_tasks` | All open tasks | — |
+| `things_list_projects` | All projects | — |
+| `things_list_areas` | All areas | — |
+| `things_list_tags` | All tags | — |
+| `things_list_project_tasks` | Tasks in a project | `project_uuid` |
+| `things_list_area_tasks` | Tasks in an area | `area_uuid` |
+| `things_list_checklist_items` | Checklist items for a task | `task_uuid` |
+| `things_get_task` | Get a single task | `uuid` |
+| `things_get_area` | Get a single area | `uuid` |
+| `things_get_tag` | Get a single tag | `uuid` |
+
+#### Write tools
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `things_create_task` | Create a task | `title` (req), `note`, `when`, `deadline`, `project`, `tags` |
+| `things_create_project` | Create a project | `title` (req), `note`, `when`, `deadline`, `area` |
+| `things_create_heading` | Create a heading in a project | `title` (req), `project` |
+| `things_create_area` | Create an area | `title` (req), `tags` |
+| `things_create_tag` | Create a tag | `title` (req), `shorthand`, `parent` |
+| `things_edit_task` | Edit a task | `uuid` (req), `title`, `note`, `when`, `deadline`, `project`, `tags` |
+| `things_complete_task` | Complete a task | `uuid` |
+| `things_uncomplete_task` | Reopen a completed task | `uuid` |
+| `things_trash_task` | Move to trash | `uuid` |
+| `things_untrash_task` | Restore from trash | `uuid` |
+| `things_move_to_today` | Schedule for today | `uuid` |
+| `things_move_to_anytime` | Move to anytime | `uuid` |
+| `things_move_to_someday` | Move to someday | `uuid` |
+| `things_move_to_inbox` | Move to inbox | `uuid` |
+
+### Claude.ai setup
+
+1. Go to **Settings > Connectors > Add custom connector**
+2. Set the URL to `https://things-cloud-mttsmth.fly.dev/mcp`
+3. No OAuth configuration needed — leave auth fields empty
+
+Then ask Claude: *"What's on my Things today?"* or *"Add a task to buy milk"*.
+
+## REST API
+
+All `/api/*` endpoints require `Authorization: Bearer <API_KEY>` when `API_KEY` is set.
+
+### Read endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Health check — `{"service":"things-cloud-api","status":"ok"}` |
+| `GET /api/verify` | Verify Things Cloud credentials |
+| `GET /api/sync` | Trigger sync, returns change count |
+| `GET /api/tasks/today` | Tasks scheduled for today |
+| `GET /api/tasks/inbox` | Tasks in the inbox |
+| `GET /api/projects` | All projects |
+| `GET /api/areas` | All areas |
+| `GET /api/tags` | All tags |
+
+### Write endpoints
+
+| Endpoint | Body | Description |
+|----------|------|-------------|
+| `POST /api/tasks/create` | `{"title":"...","note":"...","when":"today","deadline":"2025-12-31","project":"uuid","tags":"uuid1,uuid2"}` | Create a task |
+| `POST /api/tasks/edit` | `{"uuid":"...","title":"...","note":"...","when":"today"}` | Edit a task |
+| `POST /api/tasks/complete` | `{"uuid":"..."}` | Complete a task |
+| `POST /api/tasks/trash` | `{"uuid":"..."}` | Trash a task |
+
+## Testing
+
+92 integration tests across 5 test suites, all running against the live deployment.
+
+```bash
+# Daily smoke test (11 checks, ~15s) — core read/write workflow
+./tests/test-smoke.sh
+
+# Full MCP write tools (23 checks, ~45s) — all write operations end-to-end
+./tests/test-mcp.sh 010
+
+# MCP read tools (29 checks, ~30s) — all read-only tools
+./tests/test-mcp-read.sh
+
+# MCP protocol (11 checks, ~10s) — JSON-RPC handshake and error handling
+./tests/test-mcp-protocol.sh
+
+# REST API (18 checks, ~20s) — all /api/* endpoints with auth
+API_KEY=your-key ./tests/test-api.sh
+```
+
+Results are appended to `tests/test-results.log`:
 
 ```
-Things App ──▶ Things Cloud ◀── API Server (Fly.io)
-                                    ├── /api/*  (REST, Bearer auth)
-                                    └── /mcp    (MCP, Claude connector)
+2026-02-16 21:03:40 UTC  test-mcp    cycle=009  PASS  23 passed, 0 failed
+2026-02-16 21:10:23 UTC  test-smoke             PASS  11 passed, 0 failed
+2026-02-16 21:16:47 UTC  test-mcp-protocol      PASS  11 passed, 0 failed
+2026-02-16 21:17:00 UTC  test-mcp-read          PASS  29 passed, 0 failed
+2026-02-16 21:17:14 UTC  test-api               PASS  18 passed, 0 failed
 ```
 
-- **26 MCP tools** — full CRUD for tasks, projects, areas, tags, headings
-- **REST API** — read/write endpoints with Bearer token auth
-- **92 integration tests** across 5 test suites
+See [`tests/TEST_PLAN.md`](tests/TEST_PLAN.md) for check-by-check detail.
 
-See [`server/README.md`](server/README.md) for full documentation including architecture, deployment, MCP tool reference, and testing.
+## Deployment
 
-## TODO
+```bash
+# First time
+fly launch
 
-- [ ] Repeat after completion
-- [x] Persistent state storage (see `sync` package)
-- [x] API server with REST and MCP endpoints (see `server/`)
+# Subsequent deploys
+fly deploy
 
-## Note
+# Set secrets
+fly secrets set THINGS_USERNAME='...' THINGS_PASSWORD='...' API_KEY='...'
 
-As there is no official API documentation available all requests need to be reverse engineered,
-which takes some time. Feel free to contribute and improve & extend this implementation.
+# View logs
+fly logs
+```
+
+## SDK
+
+The underlying Go SDK can also be used directly as a library. See [`docs/sdk.md`](docs/sdk.md) for the full SDK documentation including:
+
+- Getting started and quick start guide
+- CLI tool (`things-cli`) with create, edit, complete, trash, batch commands
+- Working with histories and items
+- Persistent sync engine with 40+ semantic change types
+- State queries (inbox, today, projects, areas, tags)
+- Wire format notes from reverse engineering
+
+## Local development
+
+```bash
+# Build the server
+go build -v -o things-server ./server/
+
+# Run locally
+export THINGS_USERNAME='...' THINGS_PASSWORD='...'
+mkdir -p /data
+./things-server
+
+# Run SDK tests
+go test -v ./...
+```
