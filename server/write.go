@@ -9,11 +9,16 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	gosync "sync"
 	"time"
 
 	thingscloud "github.com/arthursoares/things-cloud-sdk"
 	"github.com/google/uuid"
 )
+
+// historyMu serializes all write operations (history.Sync + history.Write)
+// to prevent concurrent LatestServerIndex races.
+var historyMu gosync.Mutex
 
 // ---------------------------------------------------------------------------
 // Wire-format types (no omitempty — Things expects all fields on creates)
@@ -194,6 +199,24 @@ func generateUUID() string {
 		encoded[i], encoded[j] = encoded[j], encoded[i]
 	}
 	return string(encoded)
+}
+
+// syncForRead syncs before a read operation, logging any errors.
+// Returns the error so callers can optionally surface it.
+func syncForRead() error {
+	if _, err := syncer.Sync(); err != nil {
+		log.Printf("[SYNC] pre-read sync failed: %v", err)
+		return err
+	}
+	return nil
+}
+
+// syncAfterWrite syncs after a write to refresh local state.
+// Errors are logged but not returned (best-effort refresh).
+func syncAfterWrite() {
+	if _, err := syncer.Sync(); err != nil {
+		log.Printf("[SYNC] post-write refresh failed: %v", err)
+	}
 }
 
 func nowTs() float64 {
@@ -426,6 +449,9 @@ func buildRepeatRule(repeat string, refDate time.Time) (*json.RawMessage, error)
 // historyWrite syncs the history to get the latest ancestor index, then writes.
 // If the write still fails with 409 (race with Things app), it retries once.
 func historyWrite(env writeEnvelope) error {
+	historyMu.Lock()
+	defer historyMu.Unlock()
+
 	if client != nil && client.Debug {
 		bs, _ := json.MarshalIndent(env, "", "  ")
 		log.Printf("[WRITE] uuid=%s action=%d kind=%s payload=%s", env.id, env.action, env.kind, string(bs))
@@ -505,20 +531,26 @@ func createTask(req CreateTaskRequest) (string, error) {
 	var sr, tir *int64
 	var dd *int64
 
-	if s, r, t, ok := parseWhen(req.When); ok {
+	if req.When != "" {
+		s, r, t, ok := parseWhen(req.When)
+		if !ok {
+			return "", invalidInputf("invalid when value: %s (use today, anytime, someday, inbox, or YYYY-MM-DD)", req.When)
+		}
 		st, sr, tir = s, r, t
 	} else {
 		st = 0 // inbox
 	}
 
 	if req.Deadline != "" {
-		if t, err := time.Parse("2006-01-02", req.Deadline); err == nil {
-			ts := t.Unix()
-			if ts < todayMidnightUTC() {
-				return "", fmt.Errorf("deadline cannot be in the past")
-			}
-			dd = &ts
+		t, err := time.Parse("2006-01-02", req.Deadline)
+		if err != nil {
+			return "", invalidInputf("deadline must be YYYY-MM-DD format, got: %s", req.Deadline)
 		}
+		ts := t.Unix()
+		if ts < todayMidnightUTC() {
+			return "", invalidInputf("deadline cannot be in the past")
+		}
+		dd = &ts
 	}
 
 	pr := []string{}
@@ -563,7 +595,7 @@ func createTask(req CreateTaskRequest) (string, error) {
 	if err := historyWrite(env); err != nil {
 		return "", err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return taskUUID, nil
 }
 
@@ -577,7 +609,7 @@ func completeTask(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -590,7 +622,7 @@ func trashTask(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -624,18 +656,24 @@ func editTask(req EditTaskRequest) error {
 	if req.When == "none" {
 		u.fields["sr"] = nil
 		u.fields["tir"] = nil
-	} else if st, sr, tir, ok := parseWhen(req.When); ok {
+	} else if req.When != "" {
+		st, sr, tir, ok := parseWhen(req.When)
+		if !ok {
+			return invalidInputf("invalid when value: %s (use today, anytime, someday, inbox, none, or YYYY-MM-DD)", req.When)
+		}
 		u.schedule(st, sr, tir)
 	}
 	if req.Deadline == "none" {
 		u.clearDeadline()
 	} else if req.Deadline != "" {
-		if t, err := time.Parse("2006-01-02", req.Deadline); err == nil {
-			if t.Unix() < todayMidnightUTC() {
-				return fmt.Errorf("deadline cannot be in the past")
-			}
-			u.deadline(t.Unix())
+		t, err := time.Parse("2006-01-02", req.Deadline)
+		if err != nil {
+			return invalidInputf("deadline must be YYYY-MM-DD format, got: %s", req.Deadline)
 		}
+		if t.Unix() < todayMidnightUTC() {
+			return invalidInputf("deadline cannot be in the past")
+		}
+		u.deadline(t.Unix())
 	}
 	if req.ParentTask != "" {
 		u.project(req.ParentTask)
@@ -667,7 +705,7 @@ func editTask(req EditTaskRequest) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -681,7 +719,7 @@ func moveTaskToToday(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -694,7 +732,7 @@ func moveTaskToAnytime(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -707,7 +745,7 @@ func moveTaskToSomeday(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -720,7 +758,7 @@ func moveTaskToInbox(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -734,7 +772,7 @@ func uncompleteTask(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -747,7 +785,7 @@ func untrashTask(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -761,12 +799,13 @@ func createArea(title string, tagUUIDs []string) (string, error) {
 		"ix": 0,
 		"tt": title,
 		"tg": validatedTags,
+		"xx": defaultExtension(),
 	}
 	env := writeEnvelope{id: areaUUID, action: 0, kind: "Area3", payload: payload}
 	if err := historyWrite(env); err != nil {
 		return "", err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return areaUUID, nil
 }
 
@@ -779,17 +818,22 @@ func createTag(title, shorthand, parentUUID string) (string, error) {
 	if parentUUID != "" {
 		pn = []string{parentUUID}
 	}
+	var sh any
+	if shorthand != "" {
+		sh = shorthand
+	}
 	payload := map[string]any{
 		"ix": 0,
 		"tt": title,
-		"sh": shorthand,
+		"sh": sh,
 		"pn": pn,
+		"xx": defaultExtension(),
 	}
 	env := writeEnvelope{id: tagUUID, action: 0, kind: "Tag4", payload: payload}
 	if err := historyWrite(env); err != nil {
 		return "", err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return tagUUID, nil
 }
 
@@ -819,7 +863,7 @@ func createHeading(title, projectUUID string) (string, error) {
 	if err := historyWrite(env); err != nil {
 		return "", err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return headingUUID, nil
 }
 
@@ -842,18 +886,22 @@ func createProject(title, note, when, deadline, areaUUID string) (string, error)
 		tir = &today
 	case "someday":
 		st = 2
-	default:
+	case "anytime", "":
 		st = 1 // projects default to anytime
+	default:
+		return "", invalidInputf("invalid when value for project: %s (use today, anytime, or someday)", when)
 	}
 
 	if deadline != "" {
-		if t, err := time.Parse("2006-01-02", deadline); err == nil {
-			ts := t.Unix()
-			if ts < todayMidnightUTC() {
-				return "", fmt.Errorf("deadline cannot be in the past")
-			}
-			dd = &ts
+		t, err := time.Parse("2006-01-02", deadline)
+		if err != nil {
+			return "", invalidInputf("deadline must be YYYY-MM-DD format, got: %s", deadline)
 		}
+		ts := t.Unix()
+		if ts < todayMidnightUTC() {
+			return "", invalidInputf("deadline cannot be in the past")
+		}
+		dd = &ts
 	}
 
 	ar := []string{}
@@ -880,7 +928,7 @@ func createProject(title, note, when, deadline, areaUUID string) (string, error)
 	if err := historyWrite(env); err != nil {
 		return "", err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return projectUUID, nil
 }
 
@@ -909,7 +957,7 @@ func createChecklistItem(title, taskUUID string) (string, error) {
 	if err := historyWrite(env); err != nil {
 		return "", err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return itemUUID, nil
 }
 
@@ -927,7 +975,7 @@ func completeChecklistItem(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -944,7 +992,7 @@ func uncompleteChecklistItem(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 
@@ -962,7 +1010,7 @@ func deleteChecklistItem(uuid string) error {
 	if err := historyWrite(env); err != nil {
 		return err
 	}
-	syncer.Sync()
+	syncAfterWrite()
 	return nil
 }
 

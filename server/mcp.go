@@ -140,7 +140,7 @@ func writeResult(fields map[string]string) *mcp.CallToolResult {
 // ---------------------------------------------------------------------------
 
 func mcpListToday(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	syncer.Sync()
+	syncForRead()
 	tasks, err := syncer.State().TasksInToday(sync.QueryOpts{})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -149,7 +149,7 @@ func mcpListToday(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult
 }
 
 func mcpListInbox(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	syncer.Sync()
+	syncForRead()
 	tasks, err := syncer.State().TasksInInbox(sync.QueryOpts{})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -158,7 +158,7 @@ func mcpListInbox(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult
 }
 
 func mcpListProjects(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	syncer.Sync()
+	syncForRead()
 	projects, err := syncer.State().AllProjects(sync.QueryOpts{})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -167,7 +167,7 @@ func mcpListProjects(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolRes
 }
 
 func mcpListAreas(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	syncer.Sync()
+	syncForRead()
 	areas, err := syncer.State().AllAreas()
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -176,7 +176,7 @@ func mcpListAreas(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult
 }
 
 func mcpListTags(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	syncer.Sync()
+	syncForRead()
 	tags, err := syncer.State().AllTags()
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -185,7 +185,7 @@ func mcpListTags(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult,
 }
 
 func mcpListAllTasks(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	syncer.Sync()
+	syncForRead()
 	tasks, err := syncer.State().AllTasks(sync.QueryOpts{})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -198,7 +198,7 @@ func mcpListProjectTasks(_ context.Context, req mcp.CallToolRequest) (*mcp.CallT
 	if err != nil {
 		return mcp.NewToolResultError("project_uuid is required"), nil
 	}
-	syncer.Sync()
+	syncForRead()
 	tasks, err := syncer.State().TasksInProject(projectUUID, sync.QueryOpts{})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -211,7 +211,7 @@ func mcpListAreaTasks(_ context.Context, req mcp.CallToolRequest) (*mcp.CallTool
 	if err != nil {
 		return mcp.NewToolResultError("area_uuid is required"), nil
 	}
-	syncer.Sync()
+	syncForRead()
 	tasks, err := syncer.State().TasksInArea(areaUUID, sync.QueryOpts{})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -220,7 +220,7 @@ func mcpListAreaTasks(_ context.Context, req mcp.CallToolRequest) (*mcp.CallTool
 }
 
 func mcpListCompleted(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	syncer.Sync()
+	syncForRead()
 	limit := req.GetInt("limit", 50)
 	tasks, err := syncer.State().CompletedTasks(limit)
 	if err != nil {
@@ -234,7 +234,7 @@ func mcpListChecklistItems(_ context.Context, req mcp.CallToolRequest) (*mcp.Cal
 	if err != nil {
 		return mcp.NewToolResultError("task_uuid is required"), nil
 	}
-	syncer.Sync()
+	syncForRead()
 	items, err := syncer.State().ChecklistItems(taskUUID)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -247,7 +247,7 @@ func mcpGetTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult
 	if err != nil {
 		return mcp.NewToolResultError("uuid is required"), nil
 	}
-	syncer.Sync()
+	syncForRead()
 	task, err := syncer.State().Task(uuid)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -264,7 +264,7 @@ func mcpGetArea(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult
 	if err != nil {
 		return mcp.NewToolResultError("uuid is required"), nil
 	}
-	syncer.Sync()
+	syncForRead()
 	area, err := syncer.State().Area(uuid)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -281,7 +281,7 @@ func mcpGetTag(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult,
 	if err != nil {
 		return mcp.NewToolResultError("uuid is required"), nil
 	}
-	syncer.Sync()
+	syncForRead()
 	tag, err := syncer.State().Tag(uuid)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -495,7 +495,7 @@ func mcpSearchTasks(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolRe
 	if err != nil {
 		return mcp.NewToolResultError("query is required"), nil
 	}
-	syncer.Sync()
+	syncForRead()
 	tasks, err := syncer.State().AllTasks(sync.QueryOpts{})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
