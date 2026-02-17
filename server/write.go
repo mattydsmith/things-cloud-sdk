@@ -326,7 +326,7 @@ type CreateTaskRequest struct {
 	Project    string `json:"project,omitempty"`     // project UUID
 	ParentTask string `json:"parent_task,omitempty"` // parent task UUID (for subtasks)
 	Tags       string `json:"tags,omitempty"`        // comma-separated tag UUIDs
-	Repeat     string `json:"repeat,omitempty"`      // daily, weekly, monthly, yearly, every N days/weeks/months/years
+	Repeat     string `json:"repeat,omitempty"`      // daily, weekly, monthly, yearly, every N days/weeks/months/years, optional "until YYYY-MM-DD"
 }
 
 // EditTaskRequest is the JSON body for POST /api/tasks/edit.
@@ -340,7 +340,7 @@ type EditTaskRequest struct {
 	ParentTask string `json:"parent_task,omitempty"`
 	Area       string `json:"area,omitempty"`
 	Tags       string `json:"tags,omitempty"`
-	Repeat     string `json:"repeat,omitempty"` // daily, weekly, monthly, yearly, every N days/weeks/months/years, none
+	Repeat     string `json:"repeat,omitempty"` // daily, weekly, monthly, yearly, every N days/weeks/months/years, optional "until YYYY-MM-DD", none
 }
 
 // UUIDRequest is the JSON body for complete/trash endpoints.
@@ -354,6 +354,7 @@ type UUIDRequest struct {
 
 // buildRepeatRule builds a RepeaterConfiguration JSON from a repeat string.
 // Formats: "daily", "weekly", "monthly", "yearly", "every N days/weeks/months/years"
+// Optional end date: append "until YYYY-MM-DD".
 // Append " after completion" for repeat-after-completion mode (tp=1).
 // Returns nil if repeat is empty.
 func buildRepeatRule(repeat string, refDate time.Time) (*json.RawMessage, error) {
@@ -364,9 +365,34 @@ func buildRepeatRule(repeat string, refDate time.Time) (*json.RawMessage, error)
 	s := strings.ToLower(strings.TrimSpace(repeat))
 
 	afterCompletion := 0
-	if strings.HasSuffix(s, " after completion") {
-		afterCompletion = 1
-		s = strings.TrimSpace(strings.TrimSuffix(s, " after completion"))
+	var endTs *int64
+	for {
+		changed := false
+
+		if strings.HasSuffix(s, " after completion") {
+			afterCompletion = 1
+			s = strings.TrimSpace(strings.TrimSuffix(s, " after completion"))
+			changed = true
+		}
+
+		if idx := strings.LastIndex(s, " until "); idx != -1 {
+			dateStr := strings.TrimSpace(s[idx+len(" until "):])
+			endDate, err := time.Parse("2006-01-02", dateStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid repeat end date: %s (use YYYY-MM-DD)", dateStr)
+			}
+			ts := endDate.UTC().Unix()
+			endTs = &ts
+			s = strings.TrimSpace(s[:idx])
+			changed = true
+		}
+
+		if !changed {
+			break
+		}
+	}
+	if s == "" {
+		return nil, fmt.Errorf("invalid repeat: missing base recurrence format")
 	}
 
 	var fu int64
@@ -407,6 +433,13 @@ func buildRepeatRule(repeat string, refDate time.Time) (*json.RawMessage, error)
 
 	ref := time.Date(refDate.Year(), refDate.Month(), refDate.Day(), 0, 0, 0, 0, time.UTC)
 	srTs := ref.Unix()
+	edTs := int64(64092211200) // year 4001 = neverending
+	if endTs != nil {
+		if *endTs < srTs {
+			return nil, fmt.Errorf("repeat end date must be on or after start date")
+		}
+		edTs = *endTs
+	}
 
 	// Build detail config based on frequency
 	var of []map[string]any
@@ -431,7 +464,7 @@ func buildRepeatRule(repeat string, refDate time.Time) (*json.RawMessage, error)
 		"fa":  fa,
 		"rc":  0,
 		"ts":  0,
-		"ed":  64092211200, // year 4001 = neverending
+		"ed":  edTs,
 	}
 
 	b, err := json.Marshal(config)

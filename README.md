@@ -179,6 +179,7 @@ Only use when the user explicitly mentions a deadline. Most date requests should
 | `monthly` | Every month (on the same day of month) |
 | `yearly` | Every year (on the same date) |
 | `every N days/weeks/months/years` | Custom interval (e.g. `every 2 weeks`) |
+| `... until YYYY-MM-DD` | End recurrence on that date (inclusive) |
 | `... after completion` | Append to any format for repeat-after-completion mode |
 | `none` | Clear recurrence (edit only) |
 
