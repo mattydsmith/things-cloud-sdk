@@ -167,7 +167,7 @@ func main() {
 	}
 
 	client = things.New(things.APIEndpoint, username, password)
-	client.Debug = true
+	client.Debug = os.Getenv("DEBUG") == "true"
 
 	var err error
 	syncer, err = sync.Open("/data/things.db", client)

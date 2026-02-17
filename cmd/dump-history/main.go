@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -83,10 +84,10 @@ func main() {
 				}
 
 				// Pretty print the payload
-				var pretty json.RawMessage
+				var pretty bytes.Buffer
 				json.Indent(&pretty, envelope.P, "       ", "  ")
 
-				fmt.Printf("  [%d] %s %s %s\n       %s\n\n", i, action, envelope.E, uuid, string(pretty))
+				fmt.Printf("  [%d] %s %s %s\n       %s\n\n", i, action, envelope.E, uuid, pretty.String())
 			}
 		}
 	}

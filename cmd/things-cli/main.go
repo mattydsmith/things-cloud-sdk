@@ -1175,7 +1175,10 @@ func buildBatchCreate(op BatchOp) (thingscloud.Identifiable, map[string]string, 
 		opts[k] = v
 	}
 
-	payload := newTaskCreatePayload(op.Title, opts)
+	payload, err := newTaskCreatePayload(op.Title, opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create payload: %w", err)
+	}
 	env := writeEnvelope{id: taskUUID, action: 0, kind: "Task6", payload: payload}
 
 	return env, map[string]string{"cmd": "create", "uuid": taskUUID, "title": op.Title}, nil
@@ -1239,7 +1242,7 @@ func buildBatchMoveToProject(op BatchOp) (thingscloud.Identifiable, map[string]s
 		return nil, nil, fmt.Errorf("move-to-project requires project")
 	}
 
-	u := newTaskUpdate().Project(op.Project).Schedule(1, 0, 0)
+	u := newTaskUpdate().Project(op.Project).Schedule(1, nil, nil)
 	env := writeEnvelope{id: op.UUID, action: 1, kind: "Task6", payload: u.build()}
 
 	return env, map[string]string{"cmd": "move-to-project", "uuid": op.UUID, "project": op.Project}, nil
@@ -1253,7 +1256,7 @@ func buildBatchMoveToArea(op BatchOp) (thingscloud.Identifiable, map[string]stri
 		return nil, nil, fmt.Errorf("move-to-area requires area")
 	}
 
-	u := newTaskUpdate().Area(op.Area).Schedule(1, 0, 0)
+	u := newTaskUpdate().Area(op.Area).Schedule(1, nil, nil)
 	env := writeEnvelope{id: op.UUID, action: 1, kind: "Task6", payload: u.build()}
 
 	return env, map[string]string{"cmd": "move-to-area", "uuid": op.UUID, "area": op.Area}, nil
@@ -1293,19 +1296,19 @@ func buildBatchEdit(op BatchOp) (thingscloud.Identifiable, map[string]string, er
 	if op.Project != "" {
 		u.Project(op.Project)
 		if op.When == "" {
-			u.Schedule(1, 0, 0)
+			u.Schedule(1, nil, nil)
 		}
 	}
 	if op.Area != "" {
 		u.Area(op.Area)
 		if op.When == "" {
-			u.Schedule(1, 0, 0)
+			u.Schedule(1, nil, nil)
 		}
 	}
 	if op.Heading != "" {
 		u.Heading(op.Heading)
 		if op.When == "" {
-			u.Schedule(1, 0, 0)
+			u.Schedule(1, nil, nil)
 		}
 	}
 	if len(op.Tags) > 0 {
