@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
+	"log"
 	"math/big"
 	"net/http"
 	"strings"
@@ -83,6 +85,8 @@ type taskCreatePayload struct {
 	Xx   wireExtension    `json:"xx"`
 }
 
+var errInvalidInput = errors.New("invalid input")
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -101,6 +105,78 @@ func textNote(s string) wireNote {
 
 func defaultExtension() wireExtension {
 	return wireExtension{Sn: map[string]any{}, TypeTag: "oo"}
+}
+
+func invalidInputf(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", errInvalidInput, fmt.Sprintf(format, args...))
+}
+
+func isInvalidInput(err error) bool {
+	return errors.Is(err, errInvalidInput)
+}
+
+func isBase58UUID(id string) bool {
+	const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+	if len(id) < 20 || len(id) > 32 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if !strings.ContainsRune(alphabet, rune(id[i])) {
+			return false
+		}
+	}
+	return true
+}
+
+func validateUUID(name, id string) error {
+	if !isBase58UUID(id) {
+		return invalidInputf("%s must be a Things Base58 UUID", name)
+	}
+	return nil
+}
+
+func validateOptionalUUID(name, id string) error {
+	if id == "" || id == "none" {
+		return nil
+	}
+	return validateUUID(name, id)
+}
+
+func parseUUIDList(name, raw string) ([]string, error) {
+	if raw == "" {
+		return []string{}, nil
+	}
+	parts := strings.Split(raw, ",")
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		id := strings.TrimSpace(part)
+		if id == "" {
+			continue
+		}
+		if err := validateUUID(name, id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func validateUUIDSlice(name string, ids []string) ([]string, error) {
+	if ids == nil {
+		return []string{}, nil
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		if err := validateUUID(name, trimmed); err != nil {
+			return nil, err
+		}
+		out = append(out, trimmed)
+	}
+	return out, nil
 }
 
 func generateUUID() string {
@@ -350,20 +426,24 @@ func buildRepeatRule(repeat string, refDate time.Time) (*json.RawMessage, error)
 // historyWrite syncs the history to get the latest ancestor index, then writes.
 // If the write still fails with 409 (race with Things app), it retries once.
 func historyWrite(env writeEnvelope) error {
+	bs, _ := json.MarshalIndent(env, "", "  ")
+	log.Printf("[WRITE] uuid=%s action=%d kind=%s payload=%s", env.id, env.action, env.kind, string(bs))
 	if err := history.Sync(); err != nil {
 		return fmt.Errorf("history sync failed: %w", err)
 	}
 	err := history.Write(env)
 	if err != nil && strings.Contains(err.Error(), "409") {
-		// Retry once — another client may have committed between our sync and write
+		log.Printf("[WRITE] 409 conflict, retrying...")
 		if err2 := history.Sync(); err2 != nil {
 			return fmt.Errorf("history re-sync failed: %w", err2)
 		}
 		err = history.Write(env)
 	}
 	if err != nil {
+		log.Printf("[WRITE] FAILED: %v", err)
 		return fmt.Errorf("write failed: %w", err)
 	}
+	log.Printf("[WRITE] OK — new server index: %d", history.LatestServerIndex)
 	return nil
 }
 
@@ -388,8 +468,11 @@ func parseWhen(when string) (st int, sr, tir *int64, handled bool) {
 		if t, err := time.Parse("2006-01-02", when); err == nil {
 			ts := t.UTC().Unix()
 			today := todayMidnightUTC()
-			if ts <= today {
-				// Today or past → Today view
+			if ts < today {
+				// Past date → treat as Today
+				return 1, &today, &today, true
+			}
+			if ts == today {
 				return 1, &ts, &ts, true
 			}
 			// Future → Upcoming view (st=2 with date)
@@ -400,6 +483,17 @@ func parseWhen(when string) (st int, sr, tir *int64, handled bool) {
 }
 
 func createTask(req CreateTaskRequest) (string, error) {
+	if err := validateOptionalUUID("project", req.Project); err != nil {
+		return "", err
+	}
+	if err := validateOptionalUUID("parent_task", req.ParentTask); err != nil {
+		return "", err
+	}
+	tg, err := parseUUIDList("tags", req.Tags)
+	if err != nil {
+		return "", err
+	}
+
 	taskUUID := generateUUID()
 	now := nowTs()
 
@@ -416,6 +510,9 @@ func createTask(req CreateTaskRequest) (string, error) {
 	if req.Deadline != "" {
 		if t, err := time.Parse("2006-01-02", req.Deadline); err == nil {
 			ts := t.Unix()
+			if ts < todayMidnightUTC() {
+				return "", fmt.Errorf("deadline cannot be in the past")
+			}
 			dd = &ts
 		}
 	}
@@ -430,11 +527,6 @@ func createTask(req CreateTaskRequest) (string, error) {
 		}
 	}
 
-	tg := []string{}
-	if req.Tags != "" {
-		tg = strings.Split(req.Tags, ",")
-	}
-
 	nt := emptyNote()
 	if req.Note != "" {
 		nt = textNote(req.Note)
@@ -447,7 +539,6 @@ func createTask(req CreateTaskRequest) (string, error) {
 		if sr != nil {
 			refDate = time.Unix(*sr, 0)
 		}
-		var err error
 		rr, err = buildRepeatRule(req.Repeat, refDate)
 		if err != nil {
 			return "", fmt.Errorf("invalid repeat: %w", err)
@@ -473,6 +564,9 @@ func createTask(req CreateTaskRequest) (string, error) {
 }
 
 func completeTask(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	ts := nowTs()
 	u := newTaskUpdate().status(3).stopDate(ts)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
@@ -484,6 +578,9 @@ func completeTask(uuid string) error {
 }
 
 func trashTask(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	u := newTaskUpdate().trash(true)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
@@ -494,6 +591,23 @@ func trashTask(uuid string) error {
 }
 
 func editTask(req EditTaskRequest) error {
+	if err := validateUUID("uuid", req.UUID); err != nil {
+		return err
+	}
+	if err := validateOptionalUUID("project", req.Project); err != nil {
+		return err
+	}
+	if err := validateOptionalUUID("parent_task", req.ParentTask); err != nil {
+		return err
+	}
+	if err := validateOptionalUUID("area", req.Area); err != nil {
+		return err
+	}
+	tags, err := parseUUIDList("tags", req.Tags)
+	if err != nil {
+		return err
+	}
+
 	u := newTaskUpdate()
 	if req.Title != "" {
 		u.title(req.Title)
@@ -513,6 +627,9 @@ func editTask(req EditTaskRequest) error {
 		u.clearDeadline()
 	} else if req.Deadline != "" {
 		if t, err := time.Parse("2006-01-02", req.Deadline); err == nil {
+			if t.Unix() < todayMidnightUTC() {
+				return fmt.Errorf("deadline cannot be in the past")
+			}
 			u.deadline(t.Unix())
 		}
 	}
@@ -521,11 +638,11 @@ func editTask(req EditTaskRequest) error {
 	} else if req.Project != "" {
 		u.project(req.Project)
 		if req.When == "" {
-			u.schedule(1, 0, 0)
+			u.schedule(1, nil, nil)
 		}
 	}
 	if req.Tags != "" {
-		u.tags(strings.Split(req.Tags, ","))
+		u.tags(tags)
 	}
 	if req.Area == "none" {
 		u.clearArea()
@@ -551,6 +668,9 @@ func editTask(req EditTaskRequest) error {
 }
 
 func moveTaskToToday(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	today := todayMidnightUTC()
 	u := newTaskUpdate().schedule(1, today, today)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
@@ -562,6 +682,9 @@ func moveTaskToToday(uuid string) error {
 }
 
 func moveTaskToAnytime(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	u := newTaskUpdate().schedule(1, nil, nil)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
@@ -572,6 +695,9 @@ func moveTaskToAnytime(uuid string) error {
 }
 
 func moveTaskToSomeday(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	u := newTaskUpdate().schedule(2, nil, nil)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
@@ -582,6 +708,9 @@ func moveTaskToSomeday(uuid string) error {
 }
 
 func moveTaskToInbox(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	u := newTaskUpdate().schedule(0, nil, nil)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
@@ -592,7 +721,11 @@ func moveTaskToInbox(uuid string) error {
 }
 
 func uncompleteTask(uuid string) error {
-	u := newTaskUpdate().status(0).stopDate(0)
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
+	u := newTaskUpdate().status(0)
+	u.fields["sp"] = nil
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
 		return err
@@ -602,6 +735,9 @@ func uncompleteTask(uuid string) error {
 }
 
 func untrashTask(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	u := newTaskUpdate().trash(false)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
@@ -613,13 +749,14 @@ func untrashTask(uuid string) error {
 
 func createArea(title string, tagUUIDs []string) (string, error) {
 	areaUUID := generateUUID()
-	if tagUUIDs == nil {
-		tagUUIDs = []string{}
+	validatedTags, err := validateUUIDSlice("tags", tagUUIDs)
+	if err != nil {
+		return "", err
 	}
 	payload := map[string]any{
 		"ix": 0,
 		"tt": title,
-		"tg": tagUUIDs,
+		"tg": validatedTags,
 	}
 	env := writeEnvelope{id: areaUUID, action: 0, kind: "Area3", payload: payload}
 	if err := historyWrite(env); err != nil {
@@ -630,6 +767,9 @@ func createArea(title string, tagUUIDs []string) (string, error) {
 }
 
 func createTag(title, shorthand, parentUUID string) (string, error) {
+	if err := validateOptionalUUID("parent", parentUUID); err != nil {
+		return "", err
+	}
 	tagUUID := generateUUID()
 	pn := []string{}
 	if parentUUID != "" {
@@ -650,6 +790,9 @@ func createTag(title, shorthand, parentUUID string) (string, error) {
 }
 
 func createHeading(title, projectUUID string) (string, error) {
+	if err := validateOptionalUUID("project", projectUUID); err != nil {
+		return "", err
+	}
 	headingUUID := generateUUID()
 	now := nowTs()
 
@@ -677,6 +820,9 @@ func createHeading(title, projectUUID string) (string, error) {
 }
 
 func createProject(title, note, when, deadline, areaUUID string) (string, error) {
+	if err := validateOptionalUUID("area", areaUUID); err != nil {
+		return "", err
+	}
 	projectUUID := generateUUID()
 	now := nowTs()
 
@@ -699,6 +845,9 @@ func createProject(title, note, when, deadline, areaUUID string) (string, error)
 	if deadline != "" {
 		if t, err := time.Parse("2006-01-02", deadline); err == nil {
 			ts := t.Unix()
+			if ts < todayMidnightUTC() {
+				return "", fmt.Errorf("deadline cannot be in the past")
+			}
 			dd = &ts
 		}
 	}
@@ -736,6 +885,9 @@ func createProject(title, note, when, deadline, areaUUID string) (string, error)
 // ---------------------------------------------------------------------------
 
 func createChecklistItem(title, taskUUID string) (string, error) {
+	if err := validateUUID("task_uuid", taskUUID); err != nil {
+		return "", err
+	}
 	itemUUID := generateUUID()
 	now := nowTs()
 	payload := map[string]any{
@@ -758,6 +910,9 @@ func createChecklistItem(title, taskUUID string) (string, error) {
 }
 
 func completeChecklistItem(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	ts := nowTs()
 	payload := map[string]any{
 		"md": ts,
@@ -773,6 +928,9 @@ func completeChecklistItem(uuid string) error {
 }
 
 func uncompleteChecklistItem(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	payload := map[string]any{
 		"md": nowTs(),
 		"ss": 0,
@@ -787,6 +945,9 @@ func uncompleteChecklistItem(uuid string) error {
 }
 
 func deleteChecklistItem(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
 	// Delete via Tombstone2
 	tombUUID := generateUUID()
 	payload := map[string]any{
@@ -821,7 +982,11 @@ func handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	taskUUID, err := createTask(req)
 	if err != nil {
-		jsonError(w, err.Error(), 500)
+		code := http.StatusInternalServerError
+		if isInvalidInput(err) {
+			code = http.StatusBadRequest
+		}
+		jsonError(w, err.Error(), code)
 		return
 	}
 	jsonResponse(w, map[string]string{"status": "created", "uuid": taskUUID, "title": req.Title})
@@ -842,7 +1007,11 @@ func handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := completeTask(req.UUID); err != nil {
-		jsonError(w, err.Error(), 500)
+		code := http.StatusInternalServerError
+		if isInvalidInput(err) {
+			code = http.StatusBadRequest
+		}
+		jsonError(w, err.Error(), code)
 		return
 	}
 	jsonResponse(w, map[string]string{"status": "completed", "uuid": req.UUID})
@@ -863,7 +1032,11 @@ func handleTrashTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := trashTask(req.UUID); err != nil {
-		jsonError(w, err.Error(), 500)
+		code := http.StatusInternalServerError
+		if isInvalidInput(err) {
+			code = http.StatusBadRequest
+		}
+		jsonError(w, err.Error(), code)
 		return
 	}
 	jsonResponse(w, map[string]string{"status": "trashed", "uuid": req.UUID})
@@ -884,7 +1057,11 @@ func handleEditTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := editTask(req); err != nil {
-		jsonError(w, err.Error(), 500)
+		code := http.StatusInternalServerError
+		if isInvalidInput(err) {
+			code = http.StatusBadRequest
+		}
+		jsonError(w, err.Error(), code)
 		return
 	}
 	jsonResponse(w, map[string]string{"status": "updated", "uuid": req.UUID})

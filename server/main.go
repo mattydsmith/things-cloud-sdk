@@ -167,6 +167,7 @@ func main() {
 	}
 
 	client = things.New(things.APIEndpoint, username, password)
+	client.Debug = true
 
 	var err error
 	syncer, err = sync.Open("/data/things.db", client)
@@ -214,6 +215,117 @@ func main() {
 	http.HandleFunc("/api/tasks/complete", authMiddleware(handleCompleteTask))
 	http.HandleFunc("/api/tasks/trash", authMiddleware(handleTrashTask))
 	http.HandleFunc("/api/tasks/edit", authMiddleware(handleEditTask))
+
+	// Debug endpoint — dump raw write history items
+	http.HandleFunc("/api/debug/history", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		items, err := history.RawItems()
+		if err != nil {
+			jsonError(w, err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(items)
+	}))
+
+	// Debug endpoint — list all history keys (uses SDK method with auth)
+	http.HandleFunc("/api/debug/histories", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		histories, err := client.Histories()
+		if err != nil {
+			jsonError(w, fmt.Sprintf("list histories failed: %v", err), 500)
+			return
+		}
+		keys := make([]string, len(histories))
+		for i, h := range histories {
+			keys[i] = h.ID
+		}
+		jsonResponse(w, map[string]any{
+			"own_history": history.ID,
+			"all_keys":    keys,
+			"total":       len(keys),
+		})
+	}))
+
+	// Debug endpoint — delete the current history key (uses SDK method with auth)
+	http.HandleFunc("/api/debug/delete-history", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			jsonError(w, "POST required", 405)
+			return
+		}
+		keyToDelete := history.ID
+		var body struct {
+			Key string `json:"key"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil && body.Key != "" {
+			keyToDelete = body.Key
+		}
+		h := client.HistoryWithID(keyToDelete)
+		if err := h.Delete(); err != nil {
+			jsonError(w, fmt.Sprintf("delete failed: %v", err), 500)
+			return
+		}
+		log.Printf("[DELETE-HISTORY] key=%s deleted successfully", keyToDelete)
+		jsonResponse(w, map[string]any{
+			"deleted": keyToDelete,
+			"status":  "accepted",
+		})
+	}))
+
+	// Debug endpoint — delete account and recreate it
+	http.HandleFunc("/api/debug/nuke-account", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			jsonError(w, "POST required", 405)
+			return
+		}
+		email := client.EMail
+		password := os.Getenv("THINGS_PASSWORD")
+
+		log.Printf("[NUKE] Deleting account %s...", email)
+		if err := client.Accounts.Delete(); err != nil {
+			jsonError(w, fmt.Sprintf("delete failed: %v", err), 500)
+			return
+		}
+		log.Printf("[NUKE] Account deleted. Recreating...")
+
+		newClient, err := client.Accounts.SignUp(email, password)
+		if err != nil {
+			jsonError(w, fmt.Sprintf("signup failed: %v", err), 500)
+			return
+		}
+		log.Printf("[NUKE] Signup complete. Account needs email confirmation.")
+
+		_ = newClient
+		jsonResponse(w, map[string]any{
+			"status":  "account deleted and re-created",
+			"email":   email,
+			"message": "Check email for confirmation code, then POST to /api/debug/confirm-account",
+		})
+	}))
+
+	// Debug endpoint — confirm account with email code
+	http.HandleFunc("/api/debug/confirm-account", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			jsonError(w, "POST required", 405)
+			return
+		}
+		var body struct {
+			Code string `json:"code"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Code == "" {
+			jsonError(w, "JSON body with 'code' required", 400)
+			return
+		}
+		if err := client.Accounts.Confirm(body.Code); err != nil {
+			jsonError(w, fmt.Sprintf("confirm failed: %v", err), 500)
+			return
+		}
+		if err := client.Accounts.AcceptSLA(); err != nil {
+			log.Printf("[CONFIRM] SLA accept failed (non-fatal): %v", err)
+		}
+		log.Printf("[CONFIRM] Account confirmed and SLA accepted")
+		jsonResponse(w, map[string]any{
+			"status": "confirmed",
+		})
+	}))
 
 	// MCP endpoint (no bearer auth — claude.ai connectors use OAuth which we don't implement)
 	http.Handle("/mcp", newMCPHandler())

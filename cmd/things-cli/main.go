@@ -168,6 +168,74 @@ func parseDate(s string) *time.Time {
 	return &t
 }
 
+func isBase58UUID(id string) bool {
+	const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+	if len(id) < 20 || len(id) > 32 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if !strings.ContainsRune(alphabet, rune(id[i])) {
+			return false
+		}
+	}
+	return true
+}
+
+func validateUUID(name, id string) error {
+	if !isBase58UUID(id) {
+		return fmt.Errorf("%s must be a Things Base58 UUID", name)
+	}
+	return nil
+}
+
+func validateOptionalUUID(name, id string) (string, error) {
+	trimmed := strings.TrimSpace(id)
+	if trimmed == "" || trimmed == "none" {
+		return "", nil
+	}
+	if err := validateUUID(name, trimmed); err != nil {
+		return "", err
+	}
+	return trimmed, nil
+}
+
+func parseUUIDList(name, raw string) ([]string, error) {
+	if raw == "" {
+		return []string{}, nil
+	}
+	parts := strings.Split(raw, ",")
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		id := strings.TrimSpace(part)
+		if id == "" {
+			continue
+		}
+		if err := validateUUID(name, id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func validateUUIDSlice(name string, ids []string) ([]string, error) {
+	if ids == nil {
+		return []string{}, nil
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		if err := validateUUID(name, trimmed); err != nil {
+			return nil, err
+		}
+		out = append(out, trimmed)
+	}
+	return out, nil
+}
+
 func parseArgs(args []string) map[string]string {
 	result := make(map[string]string)
 	for i := 0; i < len(args); i++ {
@@ -218,7 +286,7 @@ func outputJSON(v any) {
 // Payload builders
 // ---------------------------------------------------------------------------
 
-func newTaskCreatePayload(title string, opts map[string]string) TaskCreatePayload {
+func newTaskCreatePayload(title string, opts map[string]string) (TaskCreatePayload, error) {
 	now := nowTs()
 
 	// Defaults
@@ -232,6 +300,23 @@ func newTaskCreatePayload(title string, opts map[string]string) TaskCreatePayloa
 	ar := []string{}
 	tg := []string{}
 	nt := emptyNote()
+
+	projectID, err := validateOptionalUUID("project", opts["project"])
+	if err != nil {
+		return TaskCreatePayload{}, err
+	}
+	headingID, err := validateOptionalUUID("heading", opts["heading"])
+	if err != nil {
+		return TaskCreatePayload{}, err
+	}
+	areaID, err := validateOptionalUUID("area", opts["area"])
+	if err != nil {
+		return TaskCreatePayload{}, err
+	}
+	tg, err = parseUUIDList("tags", opts["tags"])
+	if err != nil {
+		return TaskCreatePayload{}, err
+	}
 
 	// --type
 	if v, ok := opts["type"]; ok {
@@ -287,8 +372,8 @@ func newTaskCreatePayload(title string, opts map[string]string) TaskCreatePayloa
 	}
 
 	// --project
-	if v, ok := opts["project"]; ok && v != "" {
-		pr = []string{v}
+	if projectID != "" {
+		pr = []string{projectID}
 		// Tasks in projects are already triaged — auto-set anytime (st=1) unless --when was explicit
 		if _, hasWhen := opts["when"]; !hasWhen {
 			st = 1
@@ -296,8 +381,8 @@ func newTaskCreatePayload(title string, opts map[string]string) TaskCreatePayloa
 	}
 
 	// --heading
-	if v, ok := opts["heading"]; ok && v != "" {
-		agr = []string{v}
+	if headingID != "" {
+		agr = []string{headingID}
 		// Tasks under headings are structural — auto-set anytime (st=1) unless --when was explicit
 		if _, hasWhen := opts["when"]; !hasWhen {
 			st = 1
@@ -305,17 +390,12 @@ func newTaskCreatePayload(title string, opts map[string]string) TaskCreatePayloa
 	}
 
 	// --area
-	if v, ok := opts["area"]; ok && v != "" {
-		ar = []string{v}
+	if areaID != "" {
+		ar = []string{areaID}
 		// Tasks in areas are already triaged — auto-set anytime (st=1) unless --when was explicit
 		if _, hasWhen := opts["when"]; !hasWhen {
 			st = 1
 		}
-	}
-
-	// --tags (comma-separated)
-	if v, ok := opts["tags"]; ok && v != "" {
-		tg = strings.Split(v, ",")
 	}
 
 	// --uuid handled by caller
@@ -355,7 +435,7 @@ func newTaskCreatePayload(title string, opts map[string]string) TaskCreatePayloa
 		Sb:   0,
 		Rr:   nil,
 		Xx:   defaultExtension(),
-	}
+	}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -664,6 +744,10 @@ func containsStr(slice []string, s string) bool {
 // ---------------------------------------------------------------------------
 
 func cmdWriteChecklistItems(history *thingscloud.History, taskUUID string, items []string) {
+	if err := validateUUID("task_uuid", taskUUID); err != nil {
+		fatal("write checklist items", err)
+	}
+
 	now := nowTs()
 	for i, title := range items {
 		itemUUID := generateUUID()
@@ -691,12 +775,17 @@ func cmdCreate(history *thingscloud.History, args []string) {
 	title := args[0]
 	opts := parseArgs(args[1:])
 
-	taskUUID := opts["uuid"]
+	taskUUID := strings.TrimSpace(opts["uuid"])
 	if taskUUID == "" {
 		taskUUID = generateUUID()
+	} else if err := validateUUID("uuid", taskUUID); err != nil {
+		fatal("create task", err)
 	}
 
-	payload := newTaskCreatePayload(title, opts)
+	payload, err := newTaskCreatePayload(title, opts)
+	if err != nil {
+		fatal("create task", err)
+	}
 	env := writeEnvelope{id: taskUUID, action: 0, kind: "Task6", payload: payload}
 	if err := history.Write(env); err != nil {
 		fatal("create task", err)
@@ -712,6 +801,9 @@ func cmdCreate(history *thingscloud.History, args []string) {
 
 func cmdAddChecklist(history *thingscloud.History, taskUUID string, args []string) {
 	requireArgs(args, 1, `things-cli add-checklist <task-uuid> "Item 1,Item 2,Item 3"`)
+	if err := validateUUID("task_uuid", taskUUID); err != nil {
+		fatal("add checklist", err)
+	}
 
 	items := strings.Split(args[0], ",")
 	cmdWriteChecklistItems(history, taskUUID, items)
@@ -723,6 +815,10 @@ func cmdEdit(history *thingscloud.History, taskUUID string, args []string) {
 	opts := parseArgs(args)
 	if len(opts) == 0 {
 		fatalf("Usage: things-cli edit <uuid> [--title ...] [--note ...] [--when today|anytime|someday|inbox] [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD] [--area UUID] [--project UUID] [--heading UUID] [--tags UUID,...]")
+	}
+
+	if err := validateUUID("uuid", taskUUID); err != nil {
+		fatal("edit task", err)
 	}
 
 	u := newTaskUpdate()
@@ -765,28 +861,50 @@ func cmdEdit(history *thingscloud.History, taskUUID string, args []string) {
 		}
 	}
 	if v, ok := opts["area"]; ok && v != "" {
-		u.Area(v)
+		areaID, err := validateOptionalUUID("area", v)
+		if err != nil {
+			fatal("edit task", err)
+		}
+		if areaID != "" {
+			u.Area(areaID)
+		}
 		// When adding an area, also move out of Inbox (st=0 → st=1)
 		if _, hasWhen := opts["when"]; !hasWhen {
-			u.Schedule(1, 0, 0) // Anytime
+			u.Schedule(1, nil, nil) // Anytime
 		}
 	}
 	if v, ok := opts["project"]; ok && v != "" {
-		u.Project(v)
+		projectID, err := validateOptionalUUID("project", v)
+		if err != nil {
+			fatal("edit task", err)
+		}
+		if projectID != "" {
+			u.Project(projectID)
+		}
 		// When adding a project, also move out of Inbox (st=0 → st=1)
 		if _, hasWhen := opts["when"]; !hasWhen {
-			u.Schedule(1, 0, 0) // Anytime
+			u.Schedule(1, nil, nil) // Anytime
 		}
 	}
 	if v, ok := opts["heading"]; ok && v != "" {
-		u.Heading(v)
+		headingID, err := validateOptionalUUID("heading", v)
+		if err != nil {
+			fatal("edit task", err)
+		}
+		if headingID != "" {
+			u.Heading(headingID)
+		}
 		// When adding a heading, also move out of Inbox (st=0 → st=1)
 		if _, hasWhen := opts["when"]; !hasWhen {
-			u.Schedule(1, 0, 0) // Anytime
+			u.Schedule(1, nil, nil) // Anytime
 		}
 	}
 	if v, ok := opts["tags"]; ok && v != "" {
-		u.Tags(strings.Split(v, ","))
+		tagIDs, err := parseUUIDList("tags", v)
+		if err != nil {
+			fatal("edit task", err)
+		}
+		u.Tags(tagIDs)
 	}
 
 	env := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
@@ -798,6 +916,9 @@ func cmdEdit(history *thingscloud.History, taskUUID string, args []string) {
 }
 
 func cmdComplete(history *thingscloud.History, taskUUID string) {
+	if err := validateUUID("uuid", taskUUID); err != nil {
+		fatal("complete task", err)
+	}
 	ts := nowTs()
 	u := newTaskUpdate().Status(3).StopDate(ts)
 
@@ -810,6 +931,9 @@ func cmdComplete(history *thingscloud.History, taskUUID string) {
 }
 
 func cmdTrash(history *thingscloud.History, taskUUID string) {
+	if err := validateUUID("uuid", taskUUID); err != nil {
+		fatal("trash task", err)
+	}
 	u := newTaskUpdate().Trash(true)
 
 	env := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
@@ -821,6 +945,9 @@ func cmdTrash(history *thingscloud.History, taskUUID string) {
 }
 
 func cmdPurge(history *thingscloud.History, taskUUID string) {
+	if err := validateUUID("uuid", taskUUID); err != nil {
+		fatal("purge task", err)
+	}
 	tombstoneUUID := generateUUID()
 	payload := map[string]any{
 		"dloid": taskUUID,
@@ -836,6 +963,9 @@ func cmdPurge(history *thingscloud.History, taskUUID string) {
 }
 
 func cmdMoveToToday(history *thingscloud.History, taskUUID string) {
+	if err := validateUUID("uuid", taskUUID); err != nil {
+		fatal("move to today", err)
+	}
 	today := todayMidnightUTC()
 	u := newTaskUpdate().Schedule(1, today, today)
 
@@ -853,14 +983,16 @@ func cmdCreateArea(history *thingscloud.History, args []string) {
 	title := args[0]
 	opts := parseArgs(args[1:])
 
-	areaUUID := opts["uuid"]
+	areaUUID := strings.TrimSpace(opts["uuid"])
 	if areaUUID == "" {
 		areaUUID = generateUUID()
+	} else if err := validateUUID("uuid", areaUUID); err != nil {
+		fatal("create area", err)
 	}
 
-	tg := []string{}
-	if v, ok := opts["tags"]; ok && v != "" {
-		tg = strings.Split(v, ",")
+	tg, err := parseUUIDList("tags", opts["tags"])
+	if err != nil {
+		fatal("create area", err)
 	}
 
 	payload := map[string]any{
@@ -884,9 +1016,11 @@ func cmdCreateTag(history *thingscloud.History, args []string) {
 	title := args[0]
 	opts := parseArgs(args[1:])
 
-	tagUUID := opts["uuid"]
+	tagUUID := strings.TrimSpace(opts["uuid"])
 	if tagUUID == "" {
 		tagUUID = generateUUID()
+	} else if err := validateUUID("uuid", tagUUID); err != nil {
+		fatal("create tag", err)
 	}
 
 	// Per HAR: ix is negative, sh is null on create, pn is []
@@ -897,7 +1031,13 @@ func cmdCreateTag(history *thingscloud.History, args []string) {
 
 	pn := []string{}
 	if v, ok := opts["parent"]; ok && v != "" {
-		pn = []string{v}
+		parentID, err := validateOptionalUUID("parent", v)
+		if err != nil {
+			fatal("create tag", err)
+		}
+		if parentID != "" {
+			pn = []string{parentID}
+		}
 	}
 
 	payload := TagCreatePayload{

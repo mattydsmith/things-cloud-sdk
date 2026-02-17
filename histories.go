@@ -60,6 +60,31 @@ func (h *History) Sync() error {
 	return nil
 }
 
+// RawItems reads all items from the history starting at index 0.
+// Returns the raw JSON response body for debugging.
+func (h *History) RawItems() (json.RawMessage, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("/version/1/history/%s/items", h.ID), nil)
+	if err != nil {
+		return nil, err
+	}
+	query := req.URL.Query()
+	query.Add("start-index", "0")
+	req.URL.RawQuery = query.Encode()
+	resp, err := h.Client.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http response code: %s", resp.Status)
+	}
+	bs, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(bs), nil
+}
+
 // History requests a specific history
 func (c *Client) History(id string) (*History, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("/version/1/history/%s", id), nil)
@@ -130,6 +155,7 @@ func (c *Client) Histories() ([]*History, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Authorization", fmt.Sprintf("Password %s", c.password))
 	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
@@ -168,6 +194,7 @@ func (c *Client) CreateHistory() (*History, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Authorization", fmt.Sprintf("Password %s", c.password))
 	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
@@ -199,6 +226,7 @@ func (h *History) Delete() error {
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Authorization", fmt.Sprintf("Password %s", h.Client.password))
 	resp, err := h.Client.do(req)
 	if err != nil {
 		return err

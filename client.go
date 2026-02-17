@@ -88,6 +88,11 @@ func New(endpoint, email, password string) *Client {
 // ThingsUserAgent is the http user-agent header set by things for mac
 const ThingsUserAgent = "ThingsMac/32209501"
 
+// Do is the exported version of do for use by server code that needs direct HTTP access.
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	return c.do(req)
+}
+
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	if req.Host == "" {
 		uri := fmt.Sprintf("%s%s", c.Endpoint, req.URL)
