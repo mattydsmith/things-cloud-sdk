@@ -66,6 +66,7 @@ The server runs on [Fly.io](https://fly.io):
 | `THINGS_PASSWORD` | Yes | Things account password |
 | `API_KEY` | No | Bearer token for `/api/*` endpoints. If unset, no auth. |
 | `PORT` | No | Server port (default: `8080`) |
+| `DEBUG` | No | Enable verbose HTTP request/response logging when `true` |
 
 ## MCP Endpoint
 
@@ -214,6 +215,18 @@ All `/api/*` endpoints require `Authorization: Bearer <API_KEY>` when `API_KEY` 
 | `POST /api/tasks/edit` | `{"uuid":"...","title":"...","note":"...","when":"today"}` | Edit a task |
 | `POST /api/tasks/complete` | `{"uuid":"..."}` | Complete a task |
 | `POST /api/tasks/trash` | `{"uuid":"..."}` | Trash a task |
+
+### Debug endpoints
+
+Require both `DEBUG=true` and a valid `API_KEY`. Return 404 when `DEBUG` is not enabled.
+
+| Method & Path | Body | Description |
+|---------------|------|-------------|
+| `GET /api/debug/history` | — | Dump raw history items (all commits) |
+| `GET /api/debug/histories` | — | List all history keys for the account |
+| `POST /api/debug/delete-history` | `{"key":"..."}` (optional) | Delete a history key (defaults to current) |
+| `POST /api/debug/nuke-account` | — | Delete account and re-signup with same credentials |
+| `POST /api/debug/confirm-account` | `{"code":"..."}` | Confirm account with email verification code |
 
 ## Testing
 
