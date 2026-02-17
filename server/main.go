@@ -154,6 +154,28 @@ func authHandlerMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func debugAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if os.Getenv("DEBUG") != "true" {
+			jsonError(w, "not found", 404)
+			return
+		}
+
+		apiKey := os.Getenv("API_KEY")
+		if apiKey == "" {
+			jsonError(w, "debug endpoints require API_KEY", 503)
+			return
+		}
+
+		if r.Header.Get("Authorization") != "Bearer "+apiKey {
+			jsonError(w, "unauthorized", 401)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 func main() {
 	username := os.Getenv("THINGS_USERNAME")
 	password := os.Getenv("THINGS_PASSWORD")
@@ -217,7 +239,7 @@ func main() {
 	http.HandleFunc("/api/tasks/edit", authMiddleware(handleEditTask))
 
 	// Debug endpoint — dump raw write history items
-	http.HandleFunc("/api/debug/history", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/debug/history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		items, err := history.RawItems()
 		if err != nil {
 			jsonError(w, err.Error(), 500)
@@ -228,7 +250,7 @@ func main() {
 	}))
 
 	// Debug endpoint — list all history keys (uses SDK method with auth)
-	http.HandleFunc("/api/debug/histories", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/debug/histories", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		histories, err := client.Histories()
 		if err != nil {
 			jsonError(w, fmt.Sprintf("list histories failed: %v", err), 500)
@@ -246,7 +268,7 @@ func main() {
 	}))
 
 	// Debug endpoint — delete the current history key (uses SDK method with auth)
-	http.HandleFunc("/api/debug/delete-history", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/debug/delete-history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			jsonError(w, "POST required", 405)
 			return
@@ -271,7 +293,7 @@ func main() {
 	}))
 
 	// Debug endpoint — delete account and recreate it
-	http.HandleFunc("/api/debug/nuke-account", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/debug/nuke-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			jsonError(w, "POST required", 405)
 			return
@@ -302,7 +324,7 @@ func main() {
 	}))
 
 	// Debug endpoint — confirm account with email code
-	http.HandleFunc("/api/debug/confirm-account", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/debug/confirm-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			jsonError(w, "POST required", 405)
 			return

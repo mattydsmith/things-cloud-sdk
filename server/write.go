@@ -1,8 +1,8 @@
 package main
 
 import (
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"log"
@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	thingscloud "github.com/arthursoares/things-cloud-sdk"
+	"github.com/google/uuid"
 )
 
 // ---------------------------------------------------------------------------
@@ -426,8 +426,12 @@ func buildRepeatRule(repeat string, refDate time.Time) (*json.RawMessage, error)
 // historyWrite syncs the history to get the latest ancestor index, then writes.
 // If the write still fails with 409 (race with Things app), it retries once.
 func historyWrite(env writeEnvelope) error {
-	bs, _ := json.MarshalIndent(env, "", "  ")
-	log.Printf("[WRITE] uuid=%s action=%d kind=%s payload=%s", env.id, env.action, env.kind, string(bs))
+	if client != nil && client.Debug {
+		bs, _ := json.MarshalIndent(env, "", "  ")
+		log.Printf("[WRITE] uuid=%s action=%d kind=%s payload=%s", env.id, env.action, env.kind, string(bs))
+	} else {
+		log.Printf("[WRITE] uuid=%s action=%d kind=%s", env.id, env.action, env.kind)
+	}
 	if err := history.Sync(); err != nil {
 		return fmt.Errorf("history sync failed: %w", err)
 	}

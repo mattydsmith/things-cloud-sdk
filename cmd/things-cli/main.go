@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	thingscloud "github.com/arthursoares/things-cloud-sdk"
 	memory "github.com/arthursoares/things-cloud-sdk/state/memory"
+	"github.com/google/uuid"
 )
 
 // ---------------------------------------------------------------------------
@@ -92,15 +92,15 @@ type TaskCreatePayload struct {
 
 // ChecklistItemCreatePayload — all 9 fields for checklist item creation.
 type ChecklistItemCreatePayload struct {
-	Cd   float64       `json:"cd"`
-	Md   *float64      `json:"md"`
-	Tt   string        `json:"tt"`
-	Ss   int           `json:"ss"`
-	Sp   *float64      `json:"sp"`
-	Ix   int           `json:"ix"`
-	Ts   []string      `json:"ts"`
-	Lt   bool          `json:"lt"`
-	Xx   WireExtension `json:"xx"`
+	Cd float64       `json:"cd"`
+	Md *float64      `json:"md"`
+	Tt string        `json:"tt"`
+	Ss int           `json:"ss"`
+	Sp *float64      `json:"sp"`
+	Ix int           `json:"ix"`
+	Ts []string      `json:"ts"`
+	Lt bool          `json:"lt"`
+	Xx WireExtension `json:"xx"`
 }
 
 // TagCreatePayload — all 5 fields for tag creation.
@@ -1140,9 +1140,11 @@ func buildBatchCreate(op BatchOp) (thingscloud.Identifiable, map[string]string, 
 		return nil, nil, fmt.Errorf("create requires title")
 	}
 
-	taskUUID := op.UUID
+	taskUUID := strings.TrimSpace(op.UUID)
 	if taskUUID == "" {
 		taskUUID = generateUUID()
+	} else if err := validateUUID("uuid", taskUUID); err != nil {
+		return nil, nil, err
 	}
 
 	// Convert BatchOp to opts map for newTaskCreatePayload
@@ -1188,6 +1190,9 @@ func buildBatchComplete(op BatchOp) (thingscloud.Identifiable, map[string]string
 	if op.UUID == "" {
 		return nil, nil, fmt.Errorf("complete requires uuid")
 	}
+	if err := validateUUID("uuid", op.UUID); err != nil {
+		return nil, nil, err
+	}
 
 	ts := nowTs()
 	u := newTaskUpdate().Status(3).StopDate(ts)
@@ -1200,6 +1205,9 @@ func buildBatchTrash(op BatchOp) (thingscloud.Identifiable, map[string]string, e
 	if op.UUID == "" {
 		return nil, nil, fmt.Errorf("trash requires uuid")
 	}
+	if err := validateUUID("uuid", op.UUID); err != nil {
+		return nil, nil, err
+	}
 
 	u := newTaskUpdate().Trash(true)
 	env := writeEnvelope{id: op.UUID, action: 1, kind: "Task6", payload: u.build()}
@@ -1210,6 +1218,9 @@ func buildBatchTrash(op BatchOp) (thingscloud.Identifiable, map[string]string, e
 func buildBatchPurge(op BatchOp) (thingscloud.Identifiable, map[string]string, error) {
 	if op.UUID == "" {
 		return nil, nil, fmt.Errorf("purge requires uuid")
+	}
+	if err := validateUUID("uuid", op.UUID); err != nil {
+		return nil, nil, err
 	}
 
 	tombstoneUUID := generateUUID()
@@ -1226,6 +1237,9 @@ func buildBatchMoveToToday(op BatchOp) (thingscloud.Identifiable, map[string]str
 	if op.UUID == "" {
 		return nil, nil, fmt.Errorf("move-to-today requires uuid")
 	}
+	if err := validateUUID("uuid", op.UUID); err != nil {
+		return nil, nil, err
+	}
 
 	today := todayMidnightUTC()
 	u := newTaskUpdate().Schedule(1, today, today)
@@ -1241,11 +1255,21 @@ func buildBatchMoveToProject(op BatchOp) (thingscloud.Identifiable, map[string]s
 	if op.Project == "" {
 		return nil, nil, fmt.Errorf("move-to-project requires project")
 	}
+	if err := validateUUID("uuid", op.UUID); err != nil {
+		return nil, nil, err
+	}
+	projectID, err := validateOptionalUUID("project", op.Project)
+	if err != nil {
+		return nil, nil, err
+	}
+	if projectID == "" {
+		return nil, nil, fmt.Errorf("move-to-project requires project")
+	}
 
-	u := newTaskUpdate().Project(op.Project).Schedule(1, nil, nil)
+	u := newTaskUpdate().Project(projectID).Schedule(1, nil, nil)
 	env := writeEnvelope{id: op.UUID, action: 1, kind: "Task6", payload: u.build()}
 
-	return env, map[string]string{"cmd": "move-to-project", "uuid": op.UUID, "project": op.Project}, nil
+	return env, map[string]string{"cmd": "move-to-project", "uuid": op.UUID, "project": projectID}, nil
 }
 
 func buildBatchMoveToArea(op BatchOp) (thingscloud.Identifiable, map[string]string, error) {
@@ -1255,16 +1279,45 @@ func buildBatchMoveToArea(op BatchOp) (thingscloud.Identifiable, map[string]stri
 	if op.Area == "" {
 		return nil, nil, fmt.Errorf("move-to-area requires area")
 	}
+	if err := validateUUID("uuid", op.UUID); err != nil {
+		return nil, nil, err
+	}
+	areaID, err := validateOptionalUUID("area", op.Area)
+	if err != nil {
+		return nil, nil, err
+	}
+	if areaID == "" {
+		return nil, nil, fmt.Errorf("move-to-area requires area")
+	}
 
-	u := newTaskUpdate().Area(op.Area).Schedule(1, nil, nil)
+	u := newTaskUpdate().Area(areaID).Schedule(1, nil, nil)
 	env := writeEnvelope{id: op.UUID, action: 1, kind: "Task6", payload: u.build()}
 
-	return env, map[string]string{"cmd": "move-to-area", "uuid": op.UUID, "area": op.Area}, nil
+	return env, map[string]string{"cmd": "move-to-area", "uuid": op.UUID, "area": areaID}, nil
 }
 
 func buildBatchEdit(op BatchOp) (thingscloud.Identifiable, map[string]string, error) {
 	if op.UUID == "" {
 		return nil, nil, fmt.Errorf("edit requires uuid")
+	}
+	if err := validateUUID("uuid", op.UUID); err != nil {
+		return nil, nil, err
+	}
+	projectID, err := validateOptionalUUID("project", op.Project)
+	if err != nil {
+		return nil, nil, err
+	}
+	areaID, err := validateOptionalUUID("area", op.Area)
+	if err != nil {
+		return nil, nil, err
+	}
+	headingID, err := validateOptionalUUID("heading", op.Heading)
+	if err != nil {
+		return nil, nil, err
+	}
+	tagIDs, err := validateUUIDSlice("tags", op.Tags)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	u := newTaskUpdate()
@@ -1293,26 +1346,26 @@ func buildBatchEdit(op BatchOp) (thingscloud.Identifiable, map[string]string, er
 			u.Deadline(t.Unix())
 		}
 	}
-	if op.Project != "" {
-		u.Project(op.Project)
+	if projectID != "" {
+		u.Project(projectID)
 		if op.When == "" {
 			u.Schedule(1, nil, nil)
 		}
 	}
-	if op.Area != "" {
-		u.Area(op.Area)
+	if areaID != "" {
+		u.Area(areaID)
 		if op.When == "" {
 			u.Schedule(1, nil, nil)
 		}
 	}
-	if op.Heading != "" {
-		u.Heading(op.Heading)
+	if headingID != "" {
+		u.Heading(headingID)
 		if op.When == "" {
 			u.Schedule(1, nil, nil)
 		}
 	}
-	if len(op.Tags) > 0 {
-		u.Tags(op.Tags)
+	if len(tagIDs) > 0 {
+		u.Tags(tagIDs)
 	}
 
 	env := writeEnvelope{id: op.UUID, action: 1, kind: "Task6", payload: u.build()}
