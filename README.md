@@ -183,6 +183,8 @@ Only use when the user explicitly mentions a deadline. Most date requests should
 | `... after completion` | Append to any format for repeat-after-completion mode |
 | `none` | Clear recurrence (edit only) |
 
+Repeating tasks must be triaged (Anytime/Today/Someday/date) and cannot remain in Inbox.
+
 ### Claude.ai setup
 
 1. Go to **Settings > Connectors > Add custom connector**

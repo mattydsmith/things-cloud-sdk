@@ -574,6 +574,16 @@ func createTask(req CreateTaskRequest) (string, error) {
 		st = 0 // inbox
 	}
 
+	// Repeating tasks must be triaged; Things behaves inconsistently when repeat+inbox is sent.
+	if req.Repeat != "" {
+		if req.When == "inbox" {
+			return "", invalidInputf("repeat tasks cannot be in inbox; use when:anytime, today, someday, or YYYY-MM-DD")
+		}
+		if req.When == "" {
+			st = 1 // default to Anytime when repeat is requested
+		}
+	}
+
 	if req.Deadline != "" {
 		t, err := time.Parse("2006-01-02", req.Deadline)
 		if err != nil {
@@ -678,6 +688,10 @@ func editTask(req EditTaskRequest) error {
 	}
 
 	u := newTaskUpdate()
+	if req.Repeat != "" && req.When == "inbox" {
+		return invalidInputf("repeat tasks cannot be in inbox; use when:anytime, today, someday, YYYY-MM-DD, or omit when")
+	}
+
 	if req.Title != "" {
 		u.title(req.Title)
 	}
@@ -727,6 +741,16 @@ func editTask(req EditTaskRequest) error {
 	if req.Repeat == "none" {
 		u.fields["rr"] = nil
 	} else if req.Repeat != "" {
+		// If no new "when" is provided and the current task lives in Inbox, move it to Anytime.
+		// This avoids an inconsistent repeat+inbox combination in Things.
+		if req.When == "" {
+			if err := syncForRead(); err == nil {
+				if task, tErr := syncer.State().Task(req.UUID); tErr == nil && task != nil && task.Schedule == thingscloud.TaskScheduleInbox {
+					u.schedule(1, nil, nil)
+				}
+			}
+		}
+
 		refDate := time.Now()
 		rr, err := buildRepeatRule(req.Repeat, refDate)
 		if err != nil {

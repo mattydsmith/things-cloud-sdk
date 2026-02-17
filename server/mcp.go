@@ -835,7 +835,7 @@ func newMCPHandler() http.Handler {
 			mcp.Description("Comma-separated tag UUIDs"),
 		),
 		mcp.WithString("repeat",
-			mcp.Description("Recurrence rule. Accepts: 'daily', 'weekly', 'monthly', 'yearly', or 'every N days/weeks/months/years'. Append 'until YYYY-MM-DD' for an inclusive end date and/or 'after completion' for repeat-after-completion mode (e.g. 'daily until 2026-02-24 after completion'). Weekly defaults to the current weekday, monthly to the current day of month."),
+			mcp.Description("Recurrence rule. Accepts: 'daily', 'weekly', 'monthly', 'yearly', or 'every N days/weeks/months/years'. Append 'until YYYY-MM-DD' for an inclusive end date and/or 'after completion' for repeat-after-completion mode (e.g. 'daily until 2026-02-24 after completion'). Weekly defaults to the current weekday, monthly to the current day of month. Repeating tasks cannot be created in inbox."),
 		),
 	), mcpCreateTask)
 
@@ -878,7 +878,7 @@ func newMCPHandler() http.Handler {
 			mcp.Description("New comma-separated tag UUIDs (replaces existing)"),
 		),
 		mcp.WithString("repeat",
-			mcp.Description("Recurrence rule. Accepts: 'daily', 'weekly', 'monthly', 'yearly', 'every N days/weeks/months/years', or 'none' to clear. Append 'until YYYY-MM-DD' for an inclusive end date and/or 'after completion' for repeat-after-completion mode."),
+			mcp.Description("Recurrence rule. Accepts: 'daily', 'weekly', 'monthly', 'yearly', 'every N days/weeks/months/years', or 'none' to clear. Append 'until YYYY-MM-DD' for an inclusive end date and/or 'after completion' for repeat-after-completion mode. Repeating tasks cannot be moved to inbox."),
 		),
 	), mcpEditTask)
 
