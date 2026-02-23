@@ -468,6 +468,55 @@ func mcpCreateTag(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 	return writeResult(map[string]string{"status": "created", "uuid": uuid, "title": title}), nil
 }
 
+func mcpEditArea(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	title := req.GetString("title", "")
+	var tagUUIDs []string
+	if tagStr := req.GetString("tags", ""); tagStr != "" {
+		tagUUIDs = strings.Split(tagStr, ",")
+	}
+	if err := editArea(uuid, title, tagUUIDs); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "updated", "uuid": uuid}), nil
+}
+
+func mcpEditTag(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	if err := editTag(uuid, req.GetString("title", ""), req.GetString("shorthand", ""), req.GetString("parent", "")); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "updated", "uuid": uuid}), nil
+}
+
+func mcpDeleteArea(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	if err := deleteArea(uuid); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "deleted", "uuid": uuid}), nil
+}
+
+func mcpDeleteTag(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	if err := deleteTag(uuid); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "deleted", "uuid": uuid}), nil
+}
+
 func mcpCreateHeading(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	title, err := req.RequireString("title")
 	if err != nil {
@@ -986,6 +1035,53 @@ func newMCPHandler() http.Handler {
 			mcp.Description("Parent tag UUID for nesting"),
 		),
 	), mcpCreateTag)
+
+	s.AddTool(mcp.NewTool("things_edit_area",
+		mcp.WithDescription("Edit an existing area in Things (rename or change tags)"),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the area to edit"),
+		),
+		mcp.WithString("title",
+			mcp.Description("New area title"),
+		),
+		mcp.WithString("tags",
+			mcp.Description("Comma-separated tag UUIDs to associate (replaces existing)"),
+		),
+	), mcpEditArea)
+
+	s.AddTool(mcp.NewTool("things_edit_tag",
+		mcp.WithDescription("Edit an existing tag in Things (rename, change shorthand, or reparent)"),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the tag to edit"),
+		),
+		mcp.WithString("title",
+			mcp.Description("New tag title"),
+		),
+		mcp.WithString("shorthand",
+			mcp.Description("New keyboard shortcut, or 'none' to remove"),
+		),
+		mcp.WithString("parent",
+			mcp.Description("New parent tag UUID, or 'none' to remove parent"),
+		),
+	), mcpEditTag)
+
+	s.AddTool(mcp.NewTool("things_delete_area",
+		mcp.WithDescription("Permanently delete an area from Things. Tasks in the area will be unassigned, not deleted."),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the area to delete"),
+		),
+	), mcpDeleteArea)
+
+	s.AddTool(mcp.NewTool("things_delete_tag",
+		mcp.WithDescription("Permanently delete a tag from Things. The tag will be removed from all tasks."),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the tag to delete"),
+		),
+	), mcpDeleteTag)
 
 	s.AddTool(mcp.NewTool("things_create_heading",
 		mcp.WithDescription("Create a heading within a project in Things"),

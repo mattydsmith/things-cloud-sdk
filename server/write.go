@@ -933,6 +933,98 @@ func createTag(title, shorthand, parentUUID string) (string, error) {
 	return tagUUID, nil
 }
 
+func editArea(uuid, title string, tagUUIDs []string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
+	payload := map[string]any{}
+	if title != "" {
+		payload["tt"] = title
+	}
+	if tagUUIDs != nil {
+		validatedTags, err := validateUUIDSlice("tags", tagUUIDs)
+		if err != nil {
+			return err
+		}
+		payload["tg"] = validatedTags
+	}
+	if len(payload) == 0 {
+		return invalidInputf("nothing to update — provide title or tags")
+	}
+	env := writeEnvelope{id: uuid, action: 1, kind: "Area3", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncAfterWrite()
+	return nil
+}
+
+func editTag(uuid, title, shorthand, parentUUID string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
+	payload := map[string]any{}
+	if title != "" {
+		payload["tt"] = title
+	}
+	if shorthand == "none" {
+		payload["sh"] = nil
+	} else if shorthand != "" {
+		payload["sh"] = shorthand
+	}
+	if parentUUID == "none" {
+		payload["pn"] = []string{}
+	} else if parentUUID != "" {
+		if err := validateUUID("parent", parentUUID); err != nil {
+			return err
+		}
+		payload["pn"] = []string{parentUUID}
+	}
+	if len(payload) == 0 {
+		return invalidInputf("nothing to update — provide title, shorthand, or parent")
+	}
+	env := writeEnvelope{id: uuid, action: 1, kind: "Tag4", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncAfterWrite()
+	return nil
+}
+
+func deleteArea(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
+	tombUUID := generateUUID()
+	payload := map[string]any{
+		"dloid": uuid,
+		"dld":   nowTs(),
+	}
+	env := writeEnvelope{id: tombUUID, action: 0, kind: "Tombstone2", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncAfterWrite()
+	return nil
+}
+
+func deleteTag(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
+	tombUUID := generateUUID()
+	payload := map[string]any{
+		"dloid": uuid,
+		"dld":   nowTs(),
+	}
+	env := writeEnvelope{id: tombUUID, action: 0, kind: "Tombstone2", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncAfterWrite()
+	return nil
+}
+
 func createHeading(title, projectUUID string) (string, error) {
 	if err := validateOptionalUUID("project", projectUUID); err != nil {
 		return "", err
