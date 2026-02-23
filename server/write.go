@@ -304,6 +304,16 @@ func (u *taskUpdate) clearArea() *taskUpdate {
 	return u
 }
 
+func (u *taskUpdate) heading(uuid string) *taskUpdate {
+	u.fields["agr"] = []string{uuid}
+	return u
+}
+
+func (u *taskUpdate) clearHeading() *taskUpdate {
+	u.fields["agr"] = []string{}
+	return u
+}
+
 func (u *taskUpdate) tags(uuids []string) *taskUpdate {
 	u.fields["tg"] = uuids
 	return u
@@ -338,6 +348,7 @@ type EditTaskRequest struct {
 	Deadline   string `json:"deadline,omitempty"`
 	Project    string `json:"project,omitempty"`
 	ParentTask string `json:"parent_task,omitempty"`
+	Heading    string `json:"heading,omitempty"`    // heading UUID to place task under, or 'none' to remove
 	Area       string `json:"area,omitempty"`
 	Tags       string `json:"tags,omitempty"`
 	Repeat     string `json:"repeat,omitempty"` // daily, weekly, monthly, yearly, every N days/weeks/months/years, optional "until YYYY-MM-DD", none
@@ -682,6 +693,11 @@ func editTask(req EditTaskRequest) error {
 	if err := validateOptionalUUID("area", req.Area); err != nil {
 		return err
 	}
+	if req.Heading != "none" {
+		if err := validateOptionalUUID("heading", req.Heading); err != nil {
+			return err
+		}
+	}
 	tags, err := parseUUIDList("tags", req.Tags)
 	if err != nil {
 		return err
@@ -737,6 +753,15 @@ func editTask(req EditTaskRequest) error {
 		u.clearArea()
 	} else if req.Area != "" {
 		u.area(req.Area)
+	}
+	if req.Heading == "none" {
+		u.clearHeading()
+	} else if req.Heading != "" {
+		u.heading(req.Heading)
+		// Tasks under headings are structural — move out of Inbox if needed
+		if req.When == "" {
+			u.schedule(1, nil, nil)
+		}
 	}
 	if req.Repeat == "none" {
 		u.fields["rr"] = nil
@@ -811,6 +836,20 @@ func moveTaskToInbox(uuid string) error {
 		return err
 	}
 	u := newTaskUpdate().schedule(0, nil, nil)
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncAfterWrite()
+	return nil
+}
+
+func cancelTask(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
+	ts := nowTs()
+	u := newTaskUpdate().status(2).stopDate(ts)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
 		return err

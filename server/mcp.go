@@ -329,6 +329,17 @@ func mcpCompleteTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolR
 	return writeResult(map[string]string{"status": "completed", "uuid": uuid}), nil
 }
 
+func mcpCancelTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	if err := cancelTask(uuid); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "canceled", "uuid": uuid}), nil
+}
+
 func mcpEditTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	uuid, err := req.RequireString("uuid")
 	if err != nil {
@@ -342,6 +353,7 @@ func mcpEditTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 		Deadline:   req.GetString("deadline", ""),
 		Project:    req.GetString("project", ""),
 		ParentTask: req.GetString("parent_task", ""),
+		Heading:    req.GetString("heading", ""),
 		Area:       req.GetString("area", ""),
 		Tags:       req.GetString("tags", ""),
 		Repeat:     req.GetString("repeat", ""),
@@ -847,6 +859,14 @@ func newMCPHandler() http.Handler {
 		),
 	), mcpCompleteTask)
 
+	s.AddTool(mcp.NewTool("things_cancel_task",
+		mcp.WithDescription("Mark a Things task as canceled. Unlike completing, canceling indicates the task was abandoned rather than finished. Use things_uncomplete_task to reopen a canceled task."),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the task to cancel"),
+		),
+	), mcpCancelTask)
+
 	s.AddTool(mcp.NewTool("things_edit_task",
 		mcp.WithDescription("Edit an existing Things task"),
 		mcp.WithString("uuid",
@@ -870,6 +890,9 @@ func newMCPHandler() http.Handler {
 		),
 		mcp.WithString("parent_task",
 			mcp.Description("Move task under a parent task (make it a subtask). Takes precedence over project."),
+		),
+		mcp.WithString("heading",
+			mcp.Description("Heading UUID to place the task under within a project, or 'none' to remove from heading. The task must already be in the heading's project."),
 		),
 		mcp.WithString("area",
 			mcp.Description("Area UUID to assign the task to, or 'none' to remove from area"),
