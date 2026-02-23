@@ -157,6 +157,33 @@ func mcpListInbox(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult
 	return tasksResult(tasks), nil
 }
 
+func mcpListAnytime(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	syncForRead()
+	tasks, err := syncer.State().TasksInAnytime(sync.QueryOpts{})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return tasksResult(tasks), nil
+}
+
+func mcpListSomeday(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	syncForRead()
+	tasks, err := syncer.State().TasksInSomeday(sync.QueryOpts{})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return tasksResult(tasks), nil
+}
+
+func mcpListUpcoming(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	syncForRead()
+	tasks, err := syncer.State().TasksInUpcoming(sync.QueryOpts{})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return tasksResult(tasks), nil
+}
+
 func mcpListProjects(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	syncForRead()
 	projects, err := syncer.State().AllProjects(sync.QueryOpts{})
@@ -786,6 +813,21 @@ func newMCPHandler() http.Handler {
 		mcp.WithDescription("List tasks in the Things inbox"),
 		mcp.WithReadOnlyHintAnnotation(true),
 	), mcpListInbox)
+
+	s.AddTool(mcp.NewTool("things_list_anytime",
+		mcp.WithDescription("List tasks in the Anytime view (scheduled but not for today)"),
+		mcp.WithReadOnlyHintAnnotation(true),
+	), mcpListAnytime)
+
+	s.AddTool(mcp.NewTool("things_list_someday",
+		mcp.WithDescription("List tasks deferred to Someday (no specific scheduled date)"),
+		mcp.WithReadOnlyHintAnnotation(true),
+	), mcpListSomeday)
+
+	s.AddTool(mcp.NewTool("things_list_upcoming",
+		mcp.WithDescription("List tasks scheduled for a future date"),
+		mcp.WithReadOnlyHintAnnotation(true),
+	), mcpListUpcoming)
 
 	s.AddTool(mcp.NewTool("things_list_projects",
 		mcp.WithDescription("List all projects in Things"),

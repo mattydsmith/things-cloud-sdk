@@ -138,6 +138,73 @@ func (st *State) TasksInToday(opts QueryOpts) ([]*things.Task, error) {
 	return st.scanTaskUUIDs(rows)
 }
 
+// TasksInAnytime returns tasks in the Anytime view (schedule=1, no scheduled date or date is not today)
+func (st *State) TasksInAnytime(opts QueryOpts) ([]*things.Task, error) {
+	today := time.Now().Truncate(24 * time.Hour)
+	tomorrow := today.Add(24 * time.Hour)
+
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 1
+		AND (scheduled_date IS NULL OR scheduled_date < ? OR scheduled_date >= ?) AND deleted = 0`
+	if !opts.IncludeCompleted {
+		query += " AND status != 3"
+	}
+	if !opts.IncludeTrashed {
+		query += " AND in_trash = 0"
+	}
+	query += ` ORDER BY "index"`
+
+	rows, err := st.db.Query(query, today.Unix(), tomorrow.Unix())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return st.scanTaskUUIDs(rows)
+}
+
+// TasksInSomeday returns tasks in the Someday view (schedule=2, no future scheduled date)
+func (st *State) TasksInSomeday(opts QueryOpts) ([]*things.Task, error) {
+	now := time.Now().Unix()
+
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 2
+		AND (scheduled_date IS NULL OR scheduled_date <= ?) AND deleted = 0`
+	if !opts.IncludeCompleted {
+		query += " AND status != 3"
+	}
+	if !opts.IncludeTrashed {
+		query += " AND in_trash = 0"
+	}
+	query += ` ORDER BY "index"`
+
+	rows, err := st.db.Query(query, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return st.scanTaskUUIDs(rows)
+}
+
+// TasksInUpcoming returns tasks in the Upcoming view (schedule=2, with a future scheduled date)
+func (st *State) TasksInUpcoming(opts QueryOpts) ([]*things.Task, error) {
+	now := time.Now().Unix()
+
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 2
+		AND scheduled_date IS NOT NULL AND scheduled_date > ? AND deleted = 0`
+	if !opts.IncludeCompleted {
+		query += " AND status != 3"
+	}
+	if !opts.IncludeTrashed {
+		query += " AND in_trash = 0"
+	}
+	query += ` ORDER BY scheduled_date, "index"`
+
+	rows, err := st.db.Query(query, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return st.scanTaskUUIDs(rows)
+}
+
 // TasksInProject returns tasks belonging to a project
 func (st *State) TasksInProject(projectUUID string, opts QueryOpts) ([]*things.Task, error) {
 	query := `SELECT uuid FROM tasks WHERE type = 0 AND project_uuid = ? AND deleted = 0`
