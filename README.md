@@ -72,7 +72,7 @@ The server runs on [Fly.io](https://fly.io):
 
 The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontextprotocol.io/) using Streamable HTTP transport (JSON-RPC 2.0 over HTTP POST). No authentication — designed for use with Claude.ai custom connectors.
 
-### Tools (33)
+### Tools (38)
 
 #### Read tools
 
@@ -80,6 +80,9 @@ The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontext
 |------|-------------|------------|
 | `things_list_today` | Tasks scheduled for today | — |
 | `things_list_inbox` | Tasks in the inbox | — |
+| `things_list_anytime` | Tasks in Anytime view | — |
+| `things_list_someday` | Tasks deferred to Someday | — |
+| `things_list_upcoming` | Tasks with future scheduled dates | — |
 | `things_list_all_tasks` | All open tasks | — |
 | `things_list_projects` | All projects | — |
 | `things_list_areas` | All areas | — |
@@ -96,20 +99,26 @@ The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontext
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
-| `things_create_task` | Create a task | `title` (req), `note`, `when`, `deadline`, `project`, `parent_task`, `tags`, `repeat` |
+| `things_create_task` | Create a task | `title` (req), `note`, `when`, `deadline`, `reminder`, `project`, `parent_task`, `tags`, `repeat` |
 | `things_create_project` | Create a project | `title` (req), `note`, `when`, `deadline`, `area` |
 | `things_create_heading` | Create a heading in a project | `title` (req), `project` |
 | `things_create_area` | Create an area | `title` (req), `tags` |
 | `things_create_tag` | Create a tag | `title` (req), `shorthand`, `parent` |
-| `things_edit_task` | Edit a task | `uuid` (req), `title`, `note`, `when`, `deadline`, `project`, `parent_task`, `area`, `tags`, `repeat` |
+| `things_edit_task` | Edit a task | `uuid` (req), `title`, `note`, `when`, `deadline`, `reminder`, `project`, `parent_task`, `heading`, `area`, `tags`, `repeat`, `index`, `today_index` |
+| `things_edit_area` | Edit an area | `uuid` (req), `title`, `tags` |
+| `things_edit_tag` | Edit a tag | `uuid` (req), `title`, `shorthand`, `parent` |
 | `things_complete_task` | Complete a task | `uuid` |
-| `things_uncomplete_task` | Reopen a completed task | `uuid` |
+| `things_cancel_task` | Cancel a task | `uuid` |
+| `things_uncomplete_task` | Reopen a completed/canceled task | `uuid` |
 | `things_trash_task` | Move to trash | `uuid` |
 | `things_untrash_task` | Restore from trash | `uuid` |
 | `things_move_to_today` | Schedule for today | `uuid` |
 | `things_move_to_anytime` | Move to anytime | `uuid` |
 | `things_move_to_someday` | Move to someday | `uuid` |
 | `things_move_to_inbox` | Move to inbox | `uuid` |
+| `things_reorder_task` | Change sort position | `uuid` (req), `index`, `today_index` |
+| `things_delete_area` | Permanently delete an area | `uuid` |
+| `things_delete_tag` | Permanently delete a tag | `uuid` |
 
 #### Search tools
 
@@ -124,6 +133,7 @@ The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontext
 | `things_create_checklist_item` | Add a checklist item to a task | `title` (req), `task_uuid` (req) |
 | `things_complete_checklist_item` | Complete a checklist item | `uuid` |
 | `things_uncomplete_checklist_item` | Reopen a checklist item | `uuid` |
+| `things_edit_checklist_item` | Edit a checklist item title | `uuid` (req), `title` (req) |
 | `things_delete_checklist_item` | Delete a checklist item | `uuid` |
 
 #### Diagnostic tools
@@ -155,6 +165,13 @@ Only use when the user explicitly mentions a deadline. Most date requests should
 |-------|--------|
 | `YYYY-MM-DD` | Set a hard deadline |
 | `none` | Clear an existing deadline (edit only) |
+
+#### `reminder` — Alarm time
+
+| Value | Effect |
+|-------|--------|
+| `HH:MM` | Set reminder at this time on the task's scheduled date (e.g. `09:00`, `14:30`) |
+| `none` | Clear an existing reminder (edit only) |
 
 #### `note` — Task notes
 
@@ -192,6 +209,8 @@ Repeating tasks must be triaged (Anytime/Today/Someday/date) and cannot remain i
 3. No OAuth configuration needed — leave auth fields empty
 
 Then ask Claude: *"What's on my Things today?"* or *"Add a task to buy milk"*.
+
+For a complete API guide including quirks and common workflows, see [`docs/things-mcp-guide.md`](docs/things-mcp-guide.md).
 
 ## REST API
 
