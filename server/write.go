@@ -1184,6 +1184,22 @@ func uncompleteChecklistItem(uuid string) error {
 	return nil
 }
 
+func editChecklistItem(uuid, title string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
+	payload := map[string]any{
+		"md": nowTs(),
+		"tt": title,
+	}
+	env := writeEnvelope{id: uuid, action: 1, kind: "ChecklistItem3", payload: payload}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncAfterWrite()
+	return nil
+}
+
 func deleteChecklistItem(uuid string) error {
 	if err := validateUUID("uuid", uuid); err != nil {
 		return err

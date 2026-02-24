@@ -811,6 +811,29 @@ func cmdAddChecklist(history *thingscloud.History, taskUUID string, args []strin
 	outputJSON(map[string]string{"status": "checklist-added", "uuid": taskUUID, "items": fmt.Sprintf("%d", len(items))})
 }
 
+func cmdEditChecklist(history *thingscloud.History, itemUUID string, args []string) {
+	opts := parseArgs(args)
+	title, ok := opts["title"]
+	if !ok || title == "" {
+		fatalf("Usage: things-cli edit-checklist <checklist-item-uuid> --title \"New title\"")
+	}
+	if err := validateUUID("uuid", itemUUID); err != nil {
+		fatal("edit checklist item", err)
+	}
+
+	now := nowTs()
+	payload := map[string]any{
+		"md": now,
+		"tt": title,
+	}
+	env := writeEnvelope{id: itemUUID, action: 1, kind: "ChecklistItem3", payload: payload}
+	if err := history.Write(env); err != nil {
+		fatal("edit checklist item", err)
+	}
+
+	outputJSON(map[string]string{"status": "updated", "uuid": itemUUID, "title": title})
+}
+
 func cmdEdit(history *thingscloud.History, taskUUID string, args []string) {
 	opts := parseArgs(args)
 	if len(opts) == 0 {
@@ -1454,6 +1477,9 @@ func main() {
 	case "add-checklist":
 		requireArgs(os.Args[2:], 2, `things-cli add-checklist <task-uuid> "Item 1,Item 2,Item 3"`)
 		cmdAddChecklist(ctx.history, os.Args[2], os.Args[3:])
+	case "edit-checklist":
+		requireArgs(os.Args[2:], 2, `things-cli edit-checklist <checklist-item-uuid> --title "New title"`)
+		cmdEditChecklist(ctx.history, os.Args[2], os.Args[3:])
 	case "edit":
 		requireArgs(os.Args[2:], 1, "things-cli edit <uuid> [--title ...] [--note ...]")
 		cmdEdit(ctx.history, os.Args[2], os.Args[3:])

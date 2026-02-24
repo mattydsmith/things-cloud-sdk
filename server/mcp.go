@@ -643,6 +643,21 @@ func mcpUncompleteChecklistItem(_ context.Context, req mcp.CallToolRequest) (*mc
 	return writeResult(map[string]string{"status": "uncompleted", "uuid": uuid}), nil
 }
 
+func mcpEditChecklistItem(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	title, err := req.RequireString("title")
+	if err != nil {
+		return mcp.NewToolResultError("title is required"), nil
+	}
+	if err := editChecklistItem(uuid, title); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "updated", "uuid": uuid, "title": title}), nil
+}
+
 func mcpDeleteChecklistItem(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	uuid, err := req.RequireString("uuid")
 	if err != nil {
@@ -1197,6 +1212,18 @@ func newMCPHandler() http.Handler {
 			mcp.Description("UUID of the checklist item to uncomplete"),
 		),
 	), mcpUncompleteChecklistItem)
+
+	s.AddTool(mcp.NewTool("things_edit_checklist_item",
+		mcp.WithDescription("Edit the title of a checklist item (checkbox)"),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the checklist item to edit"),
+		),
+		mcp.WithString("title",
+			mcp.Required(),
+			mcp.Description("New title for the checklist item"),
+		),
+	), mcpEditChecklistItem)
 
 	s.AddTool(mcp.NewTool("things_delete_checklist_item",
 		mcp.WithDescription("Delete a checklist item (checkbox) from a task"),
