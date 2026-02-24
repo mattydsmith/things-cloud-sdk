@@ -6,6 +6,7 @@ import (
 	"hash/crc32"
 	"math/big"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -520,6 +521,16 @@ func (u *taskUpdate) Tags(uuids []string) *taskUpdate {
 	return u
 }
 
+func (u *taskUpdate) Index(ix int) *taskUpdate {
+	u.fields["ix"] = ix
+	return u
+}
+
+func (u *taskUpdate) TodayIndex(ti int) *taskUpdate {
+	u.fields["ti"] = ti
+	return u
+}
+
 func (u *taskUpdate) build() map[string]any {
 	return u.fields
 }
@@ -929,6 +940,20 @@ func cmdEdit(history *thingscloud.History, taskUUID string, args []string) {
 		}
 		u.Tags(tagIDs)
 	}
+	if v, ok := opts["index"]; ok {
+		ix, err := strconv.Atoi(v)
+		if err != nil {
+			fatalf("index must be an integer, got: %s", v)
+		}
+		u.Index(ix)
+	}
+	if v, ok := opts["today-index"]; ok {
+		ti, err := strconv.Atoi(v)
+		if err != nil {
+			fatalf("today-index must be an integer, got: %s", v)
+		}
+		u.TodayIndex(ti)
+	}
 
 	env := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
 	if err := history.Write(env); err != nil {
@@ -998,6 +1023,48 @@ func cmdMoveToToday(history *thingscloud.History, taskUUID string) {
 	}
 
 	outputJSON(map[string]string{"status": "moved-to-today", "uuid": taskUUID})
+}
+
+func cmdReorder(history *thingscloud.History, taskUUID string, args []string) {
+	opts := parseArgs(args)
+	if len(opts) == 0 {
+		fatalf("Usage: things-cli reorder <uuid> [--index N] [--today-index N]")
+	}
+
+	if err := validateUUID("uuid", taskUUID); err != nil {
+		fatal("reorder", err)
+	}
+
+	u := newTaskUpdate()
+	hasField := false
+
+	if v, ok := opts["index"]; ok {
+		ix, err := strconv.Atoi(v)
+		if err != nil {
+			fatalf("index must be an integer, got: %s", v)
+		}
+		u.Index(ix)
+		hasField = true
+	}
+	if v, ok := opts["today-index"]; ok {
+		ti, err := strconv.Atoi(v)
+		if err != nil {
+			fatalf("today-index must be an integer, got: %s", v)
+		}
+		u.TodayIndex(ti)
+		hasField = true
+	}
+
+	if !hasField {
+		fatalf("at least one of --index or --today-index is required")
+	}
+
+	env := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
+	if err := history.Write(env); err != nil {
+		fatal("reorder", err)
+	}
+
+	outputJSON(map[string]string{"status": "reordered", "uuid": taskUUID})
 }
 
 func cmdCreateArea(history *thingscloud.History, args []string) {
@@ -1153,6 +1220,8 @@ func buildBatchEnvelope(op BatchOp) (thingscloud.Identifiable, map[string]string
 		return buildBatchMoveToArea(op)
 	case "edit":
 		return buildBatchEdit(op)
+	case "reorder":
+		return buildBatchReorder(op)
 	default:
 		return nil, nil, fmt.Errorf("unknown command: %s", op.Cmd)
 	}
@@ -1390,10 +1459,56 @@ func buildBatchEdit(op BatchOp) (thingscloud.Identifiable, map[string]string, er
 	if len(tagIDs) > 0 {
 		u.Tags(tagIDs)
 	}
+	if v, ok := op.Extra["index"]; ok {
+		ix, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, nil, fmt.Errorf("index must be an integer, got: %s", v)
+		}
+		u.Index(ix)
+	}
+	if v, ok := op.Extra["today-index"]; ok {
+		ti, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, nil, fmt.Errorf("today-index must be an integer, got: %s", v)
+		}
+		u.TodayIndex(ti)
+	}
 
 	env := writeEnvelope{id: op.UUID, action: 1, kind: "Task6", payload: u.build()}
 
 	return env, map[string]string{"cmd": "edit", "uuid": op.UUID}, nil
+}
+
+func buildBatchReorder(op BatchOp) (thingscloud.Identifiable, map[string]string, error) {
+	if op.UUID == "" {
+		return nil, nil, fmt.Errorf("reorder requires uuid")
+	}
+	if err := validateUUID("uuid", op.UUID); err != nil {
+		return nil, nil, err
+	}
+	u := newTaskUpdate()
+	hasField := false
+	if v, ok := op.Extra["index"]; ok {
+		ix, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, nil, fmt.Errorf("index must be an integer, got: %s", v)
+		}
+		u.Index(ix)
+		hasField = true
+	}
+	if v, ok := op.Extra["today-index"]; ok {
+		ti, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, nil, fmt.Errorf("today-index must be an integer, got: %s", v)
+		}
+		u.TodayIndex(ti)
+		hasField = true
+	}
+	if !hasField {
+		return nil, nil, fmt.Errorf("reorder requires at least one of extra.index or extra.today-index")
+	}
+	env := writeEnvelope{id: op.UUID, action: 1, kind: "Task6", payload: u.build()}
+	return env, map[string]string{"cmd": "reorder", "uuid": op.UUID}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1421,7 +1536,8 @@ Write commands (fast — skip state loading):
   add-checklist <task-uuid> "Item 1,Item 2,Item 3"
   edit <uuid> [--title ...] [--note ...] [--when ...] [--deadline ...]
          [--scheduled ...] [--area UUID] [--project UUID]
-         [--heading UUID] [--tags UUID,...]
+         [--heading UUID] [--tags UUID,...] [--index N] [--today-index N]
+  reorder <uuid> --index N [--today-index N]
   complete <uuid>
   trash <uuid>
   purge <uuid>
@@ -1441,7 +1557,8 @@ Batch command (reads JSON from stdin, sends all ops in one HTTP request):
     {"cmd": "move-to-today", "uuid": "..."}
     {"cmd": "move-to-project", "uuid": "...", "project": "..."}
     {"cmd": "move-to-area", "uuid": "...", "area": "..."}
-    {"cmd": "edit", "uuid": "...", "title": "...", "note": "...", ...}`)
+    {"cmd": "edit", "uuid": "...", "title": "...", "note": "...", ...}
+    {"cmd": "reorder", "uuid": "...", "extra": {"index": "N", "today-index": "N"}}`)
 }
 
 func main() {
@@ -1495,6 +1612,9 @@ func main() {
 	case "move-to-today":
 		requireArgs(os.Args[2:], 1, "things-cli move-to-today <uuid>")
 		cmdMoveToToday(ctx.history, os.Args[2])
+	case "reorder":
+		requireArgs(os.Args[2:], 2, "things-cli reorder <uuid> --index N [--today-index N]")
+		cmdReorder(ctx.history, os.Args[2], os.Args[3:])
 	case "batch":
 		cmdBatch(ctx.history)
 

@@ -319,6 +319,16 @@ func (u *taskUpdate) tags(uuids []string) *taskUpdate {
 	return u
 }
 
+func (u *taskUpdate) index(ix int) *taskUpdate {
+	u.fields["ix"] = ix
+	return u
+}
+
+func (u *taskUpdate) todayIndex(ti int) *taskUpdate {
+	u.fields["ti"] = ti
+	return u
+}
+
 func (u *taskUpdate) build() map[string]any {
 	return u.fields
 }
@@ -352,6 +362,15 @@ type EditTaskRequest struct {
 	Area       string `json:"area,omitempty"`
 	Tags       string `json:"tags,omitempty"`
 	Repeat     string `json:"repeat,omitempty"` // daily, weekly, monthly, yearly, every N days/weeks/months/years, optional "until YYYY-MM-DD", none
+	Index      *int   `json:"index,omitempty"`       // general sort index (ix)
+	TodayIndex *int   `json:"today_index,omitempty"` // Today view sort index (ti)
+}
+
+// ReorderTaskRequest is the JSON body for POST /api/tasks/reorder.
+type ReorderTaskRequest struct {
+	UUID       string `json:"uuid"`
+	Index      *int   `json:"index,omitempty"`       // general ordering (ix)
+	TodayIndex *int   `json:"today_index,omitempty"` // ordering within Today view (ti)
 }
 
 // UUIDRequest is the JSON body for complete/trash endpoints.
@@ -783,6 +802,12 @@ func editTask(req EditTaskRequest) error {
 		}
 		u.fields["rr"] = rr
 	}
+	if req.Index != nil {
+		u.index(*req.Index)
+	}
+	if req.TodayIndex != nil {
+		u.todayIndex(*req.TodayIndex)
+	}
 	env := writeEnvelope{id: req.UUID, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
 		return err
@@ -878,6 +903,28 @@ func untrashTask(uuid string) error {
 	}
 	u := newTaskUpdate().trash(false)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncAfterWrite()
+	return nil
+}
+
+func reorderTask(req ReorderTaskRequest) error {
+	if err := validateUUID("uuid", req.UUID); err != nil {
+		return err
+	}
+	if req.Index == nil && req.TodayIndex == nil {
+		return invalidInputf("at least one of index or today_index is required")
+	}
+	u := newTaskUpdate()
+	if req.Index != nil {
+		u.index(*req.Index)
+	}
+	if req.TodayIndex != nil {
+		u.todayIndex(*req.TodayIndex)
+	}
+	env := writeEnvelope{id: req.UUID, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
 		return err
 	}
@@ -1321,6 +1368,31 @@ func handleEditTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, map[string]string{"status": "updated", "uuid": req.UUID})
+}
+
+func handleReorderTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", 405)
+		return
+	}
+	var req ReorderTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON: "+err.Error(), 400)
+		return
+	}
+	if req.UUID == "" {
+		jsonError(w, "uuid is required", 400)
+		return
+	}
+	if err := reorderTask(req); err != nil {
+		code := http.StatusInternalServerError
+		if isInvalidInput(err) {
+			code = http.StatusBadRequest
+		}
+		jsonError(w, err.Error(), code)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "reordered", "uuid": req.UUID})
 }
 
 // Ensure writeEnvelope implements Identifiable

@@ -237,6 +237,7 @@ func main() {
 	http.HandleFunc("/api/tasks/complete", authMiddleware(handleCompleteTask))
 	http.HandleFunc("/api/tasks/trash", authMiddleware(handleTrashTask))
 	http.HandleFunc("/api/tasks/edit", authMiddleware(handleEditTask))
+	http.HandleFunc("/api/tasks/reorder", authMiddleware(handleReorderTask))
 
 	// Debug endpoint — dump raw write history items
 	http.HandleFunc("/api/debug/history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {

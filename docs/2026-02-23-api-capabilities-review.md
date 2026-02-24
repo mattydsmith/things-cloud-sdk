@@ -73,8 +73,8 @@ Source: `TaskActionItemPayload` in `types.go:209-274`
 
 | Field | Wire | Default | Notes |
 |-------|------|---------|-------|
-| Index (ordering) | `ix` | 0 | **Can't reorder tasks** |
-| Today index | `ti` | 0 | **Can't reorder in Today view** |
+| Index (ordering) | `ix` | 0 | Settable via reorder/edit |
+| Today index | `ti` | 0 | Settable via reorder/edit |
 | Due order | `do` | 0 | **Can't control deadline sort** |
 | Delegate IDs | `dl` | `[]` | **Not settable** |
 | Reminder date | `rmd` | null | **Not implemented** |

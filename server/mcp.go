@@ -372,7 +372,7 @@ func mcpEditTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 	if err != nil {
 		return mcp.NewToolResultError("uuid is required"), nil
 	}
-	if err := editTask(EditTaskRequest{
+	editReq := EditTaskRequest{
 		UUID:       uuid,
 		Title:      req.GetString("title", ""),
 		Note:       req.GetString("note", ""),
@@ -384,7 +384,14 @@ func mcpEditTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 		Area:       req.GetString("area", ""),
 		Tags:       req.GetString("tags", ""),
 		Repeat:     req.GetString("repeat", ""),
-	}); err != nil {
+	}
+	if v, err := req.RequireInt("index"); err == nil {
+		editReq.Index = &v
+	}
+	if v, err := req.RequireInt("today_index"); err == nil {
+		editReq.TodayIndex = &v
+	}
+	if err := editTask(editReq); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return writeResult(map[string]string{"status": "updated", "uuid": uuid}), nil
@@ -465,6 +472,27 @@ func mcpUntrashTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolRe
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return writeResult(map[string]string{"status": "restored", "uuid": uuid}), nil
+}
+
+func mcpReorderTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	uuid, err := req.RequireString("uuid")
+	if err != nil {
+		return mcp.NewToolResultError("uuid is required"), nil
+	}
+	r := ReorderTaskRequest{UUID: uuid}
+	if v, err := req.RequireInt("index"); err == nil {
+		r.Index = &v
+	}
+	if v, err := req.RequireInt("today_index"); err == nil {
+		r.TodayIndex = &v
+	}
+	if r.Index == nil && r.TodayIndex == nil {
+		return mcp.NewToolResultError("at least one of index or today_index is required"), nil
+	}
+	if err := reorderTask(r); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return writeResult(map[string]string{"status": "reordered", "uuid": uuid}), nil
 }
 
 func mcpCreateArea(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -1009,6 +1037,12 @@ func newMCPHandler() http.Handler {
 		mcp.WithString("repeat",
 			mcp.Description("Recurrence rule. Accepts: 'daily', 'weekly', 'monthly', 'yearly', 'every N days/weeks/months/years', or 'none' to clear. Append 'until YYYY-MM-DD' for an inclusive end date and/or 'after completion' for repeat-after-completion mode. Repeating tasks cannot be moved to inbox."),
 		),
+		mcp.WithNumber("index",
+			mcp.Description("General sort index (ix). Controls position in inbox, project, anytime, and someday lists. Lower values appear first. Negative values are valid."),
+		),
+		mcp.WithNumber("today_index",
+			mcp.Description("Today view sort index (ti). Controls position within the Today list. Lower values appear first. Negative values are valid."),
+		),
 	), mcpEditTask)
 
 	s.AddTool(mcp.NewTool("things_trash_task",
@@ -1067,6 +1101,20 @@ func newMCPHandler() http.Handler {
 			mcp.Description("UUID of the task to restore"),
 		),
 	), mcpUntrashTask)
+
+	s.AddTool(mcp.NewTool("things_reorder_task",
+		mcp.WithDescription("Change the sort position of a task. Set index for general ordering (inbox, project, anytime, someday lists) and/or today_index for ordering within the Today view. Lower values appear first. Negative values are valid."),
+		mcp.WithString("uuid",
+			mcp.Required(),
+			mcp.Description("UUID of the task to reorder"),
+		),
+		mcp.WithNumber("index",
+			mcp.Description("New general sort index (ix). Controls position in inbox, project, anytime, and someday lists."),
+		),
+		mcp.WithNumber("today_index",
+			mcp.Description("New Today view sort index (ti). Controls position within the Today list."),
+		),
+	), mcpReorderTask)
 
 	s.AddTool(mcp.NewTool("things_create_area",
 		mcp.WithDescription("Create a new area in Things"),
