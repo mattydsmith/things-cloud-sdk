@@ -338,6 +338,7 @@ func mcpCreateTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolRes
 		ParentTask: req.GetString("parent_task", ""),
 		Tags:       req.GetString("tags", ""),
 		Repeat:     req.GetString("repeat", ""),
+		Reminder:   req.GetString("reminder", ""),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -384,6 +385,7 @@ func mcpEditTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResul
 		Area:       req.GetString("area", ""),
 		Tags:       req.GetString("tags", ""),
 		Repeat:     req.GetString("repeat", ""),
+		Reminder:   req.GetString("reminder", ""),
 	}
 	if v, err := req.RequireInt("index"); err == nil {
 		editReq.Index = &v
@@ -983,6 +985,9 @@ func newMCPHandler() http.Handler {
 		mcp.WithString("repeat",
 			mcp.Description("Recurrence rule. Accepts: 'daily', 'weekly', 'monthly', 'yearly', or 'every N days/weeks/months/years'. Append 'until YYYY-MM-DD' for an inclusive end date and/or 'after completion' for repeat-after-completion mode (e.g. 'daily until 2026-02-24 after completion'). Weekly defaults to the current weekday, monthly to the current day of month. Repeating tasks cannot be created in inbox."),
 		),
+		mcp.WithString("reminder",
+			mcp.Description("Reminder time in HH:MM format (e.g. '09:00', '14:30'). Sets the alarm time offset — the reminder fires at this time on the task's scheduled date."),
+		),
 	), mcpCreateTask)
 
 	s.AddTool(mcp.NewTool("things_complete_task",
@@ -1036,6 +1041,9 @@ func newMCPHandler() http.Handler {
 		),
 		mcp.WithString("repeat",
 			mcp.Description("Recurrence rule. Accepts: 'daily', 'weekly', 'monthly', 'yearly', 'every N days/weeks/months/years', or 'none' to clear. Append 'until YYYY-MM-DD' for an inclusive end date and/or 'after completion' for repeat-after-completion mode. Repeating tasks cannot be moved to inbox."),
+		),
+		mcp.WithString("reminder",
+			mcp.Description("Reminder time in HH:MM format (e.g. '09:00', '14:30'), or 'none' to clear an existing reminder. Sets the alarm time offset — the reminder fires at this time on the task's scheduled date."),
 		),
 		mcp.WithNumber("index",
 			mcp.Description("General sort index (ix). Controls position in inbox, project, anytime, and someday lists. Lower values appear first. Negative values are valid."),

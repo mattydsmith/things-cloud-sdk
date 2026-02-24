@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	gosync "sync"
 	"time"
@@ -228,6 +229,21 @@ func todayMidnightUTC() int64 {
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
 }
 
+// parseReminder converts a HH:MM time string to seconds from midnight.
+// Returns the offset and true on success, or 0 and false on failure.
+func parseReminder(s string) (int, bool) {
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) != 2 {
+		return 0, false
+	}
+	h, err1 := strconv.Atoi(parts[0])
+	m, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, false
+	}
+	return h*3600 + m*60, true
+}
+
 // ---------------------------------------------------------------------------
 // Fluent update builder
 // ---------------------------------------------------------------------------
@@ -329,6 +345,16 @@ func (u *taskUpdate) todayIndex(ti int) *taskUpdate {
 	return u
 }
 
+func (u *taskUpdate) reminder(ato int) *taskUpdate {
+	u.fields["ato"] = ato
+	return u
+}
+
+func (u *taskUpdate) clearReminder() *taskUpdate {
+	u.fields["ato"] = nil
+	return u
+}
+
 func (u *taskUpdate) build() map[string]any {
 	return u.fields
 }
@@ -347,6 +373,7 @@ type CreateTaskRequest struct {
 	ParentTask string `json:"parent_task,omitempty"` // parent task UUID (for subtasks)
 	Tags       string `json:"tags,omitempty"`        // comma-separated tag UUIDs
 	Repeat     string `json:"repeat,omitempty"`      // daily, weekly, monthly, yearly, every N days/weeks/months/years, optional "until YYYY-MM-DD"
+	Reminder   string `json:"reminder,omitempty"`    // HH:MM time for reminder, or 'none' to clear
 }
 
 // EditTaskRequest is the JSON body for POST /api/tasks/edit.
@@ -362,6 +389,7 @@ type EditTaskRequest struct {
 	Area       string `json:"area,omitempty"`
 	Tags       string `json:"tags,omitempty"`
 	Repeat     string `json:"repeat,omitempty"` // daily, weekly, monthly, yearly, every N days/weeks/months/years, optional "until YYYY-MM-DD", none
+	Reminder   string `json:"reminder,omitempty"` // HH:MM time for reminder, or 'none' to clear
 	Index      *int   `json:"index,omitempty"`       // general sort index (ix)
 	TodayIndex *int   `json:"today_index,omitempty"` // Today view sort index (ti)
 }
@@ -654,12 +682,22 @@ func createTask(req CreateTaskRequest) (string, error) {
 		}
 	}
 
+	// Parse reminder (alarm time offset)
+	var ato *int
+	if req.Reminder != "" && req.Reminder != "none" {
+		offset, ok := parseReminder(req.Reminder)
+		if !ok {
+			return "", invalidInputf("reminder must be HH:MM format (e.g. 09:00), got: %s", req.Reminder)
+		}
+		ato = &offset
+	}
+
 	payload := taskCreatePayload{
 		Tp: 0, Sr: sr, Dds: nil, Rt: []string{}, Rmd: nil,
 		Ss: 0, Tr: false, Dl: []string{}, Icp: false, St: st,
 		Ar: []string{}, Tt: req.Title, Do: 0, Lai: nil, Tir: tir,
 		Tg: tg, Agr: []string{}, Ix: 0, Cd: now, Lt: false,
-		Icc: 0, Md: nil, Ti: 0, Dd: dd, Ato: nil, Nt: nt,
+		Icc: 0, Md: nil, Ti: 0, Dd: dd, Ato: ato, Nt: nt,
 		Icsd: nil, Pr: pr, Rp: nil, Acrd: nil, Sp: nil,
 		Sb: 0, Rr: rr, Xx: defaultExtension(),
 	}
@@ -801,6 +839,15 @@ func editTask(req EditTaskRequest) error {
 			return fmt.Errorf("invalid repeat: %w", err)
 		}
 		u.fields["rr"] = rr
+	}
+	if req.Reminder == "none" {
+		u.clearReminder()
+	} else if req.Reminder != "" {
+		offset, ok := parseReminder(req.Reminder)
+		if !ok {
+			return invalidInputf("reminder must be HH:MM format (e.g. 09:00), got: %s", req.Reminder)
+		}
+		u.reminder(offset)
 	}
 	if req.Index != nil {
 		u.index(*req.Index)

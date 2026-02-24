@@ -169,6 +169,21 @@ func parseDate(s string) *time.Time {
 	return &t
 }
 
+// parseReminder converts a HH:MM time string to seconds from midnight.
+// Returns the offset and true on success, or 0 and false on failure.
+func parseReminder(s string) (int, bool) {
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) != 2 {
+		return 0, false
+	}
+	h, err1 := strconv.Atoi(parts[0])
+	m, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, false
+	}
+	return h*3600 + m*60, true
+}
+
 func isBase58UUID(id string) bool {
 	const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 	if len(id) < 20 || len(id) > 32 {
@@ -399,6 +414,16 @@ func newTaskCreatePayload(title string, opts map[string]string) (TaskCreatePaylo
 		}
 	}
 
+	// --reminder
+	var ato *int
+	if v, ok := opts["reminder"]; ok && v != "" && v != "none" {
+		offset, ok := parseReminder(v)
+		if !ok {
+			return TaskCreatePayload{}, fmt.Errorf("reminder must be HH:MM format (e.g. 09:00), got: %s", v)
+		}
+		ato = &offset
+	}
+
 	// --uuid handled by caller
 
 	return TaskCreatePayload{
@@ -426,7 +451,7 @@ func newTaskCreatePayload(title string, opts map[string]string) (TaskCreatePaylo
 		Md:   nil, // must be null for creates — Things.app crashes otherwise
 		Ti:   0,
 		Dd:   dd,
-		Ato:  nil,
+		Ato:  ato,
 		Nt:   nt,
 		Icsd: nil,
 		Pr:   pr,
@@ -528,6 +553,16 @@ func (u *taskUpdate) Index(ix int) *taskUpdate {
 
 func (u *taskUpdate) TodayIndex(ti int) *taskUpdate {
 	u.fields["ti"] = ti
+	return u
+}
+
+func (u *taskUpdate) Reminder(ato int) *taskUpdate {
+	u.fields["ato"] = ato
+	return u
+}
+
+func (u *taskUpdate) ClearReminder() *taskUpdate {
+	u.fields["ato"] = nil
 	return u
 }
 
@@ -781,7 +816,7 @@ func cmdWriteChecklistItems(history *thingscloud.History, taskUUID string, items
 }
 
 func cmdCreate(history *thingscloud.History, args []string) {
-	requireArgs(args, 1, "things-cli create \"Title\" [--note ...] [--when today|anytime|someday|inbox] [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD] [--project UUID] [--heading UUID] [--area UUID] [--tags UUID,...] [--type task|project|heading] [--uuid UUID] [--checklist \"Item 1,Item 2,...\"]")
+	requireArgs(args, 1, "things-cli create \"Title\" [--note ...] [--when today|anytime|someday|inbox] [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD] [--reminder HH:MM] [--project UUID] [--heading UUID] [--area UUID] [--tags UUID,...] [--type task|project|heading] [--uuid UUID] [--checklist \"Item 1,Item 2,...\"]")
 
 	title := args[0]
 	opts := parseArgs(args[1:])
@@ -848,7 +883,7 @@ func cmdEditChecklist(history *thingscloud.History, itemUUID string, args []stri
 func cmdEdit(history *thingscloud.History, taskUUID string, args []string) {
 	opts := parseArgs(args)
 	if len(opts) == 0 {
-		fatalf("Usage: things-cli edit <uuid> [--title ...] [--note ...] [--when today|anytime|someday|inbox] [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD] [--area UUID] [--project UUID] [--heading UUID] [--tags UUID,...]")
+		fatalf("Usage: things-cli edit <uuid> [--title ...] [--note ...] [--when today|anytime|someday|inbox] [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD] [--reminder HH:MM|none] [--area UUID] [--project UUID] [--heading UUID] [--tags UUID,...]")
 	}
 
 	if err := validateUUID("uuid", taskUUID); err != nil {
@@ -953,6 +988,17 @@ func cmdEdit(history *thingscloud.History, taskUUID string, args []string) {
 			fatalf("today-index must be an integer, got: %s", v)
 		}
 		u.TodayIndex(ti)
+	}
+	if v, ok := opts["reminder"]; ok {
+		if v == "none" || v == "" {
+			u.ClearReminder()
+		} else {
+			offset, ok := parseReminder(v)
+			if !ok {
+				fatalf("reminder must be HH:MM format (e.g. 09:00), got: %s", v)
+			}
+			u.Reminder(offset)
+		}
 	}
 
 	env := writeEnvelope{id: taskUUID, action: 1, kind: "Task6", payload: u.build()}
@@ -1158,6 +1204,7 @@ type BatchOp struct {
 	Note     string            `json:"note,omitempty"`
 	When     string            `json:"when,omitempty"`
 	Deadline string            `json:"deadline,omitempty"`
+	Reminder string            `json:"reminder,omitempty"` // HH:MM or "none"
 	Project  string            `json:"project,omitempty"`
 	Area     string            `json:"area,omitempty"`
 	Heading  string            `json:"heading,omitempty"`
@@ -1264,6 +1311,9 @@ func buildBatchCreate(op BatchOp) (thingscloud.Identifiable, map[string]string, 
 	}
 	if op.Type != "" {
 		opts["type"] = op.Type
+	}
+	if op.Reminder != "" {
+		opts["reminder"] = op.Reminder
 	}
 	for k, v := range op.Extra {
 		opts[k] = v
@@ -1473,6 +1523,15 @@ func buildBatchEdit(op BatchOp) (thingscloud.Identifiable, map[string]string, er
 		}
 		u.TodayIndex(ti)
 	}
+	if op.Reminder == "none" {
+		u.ClearReminder()
+	} else if op.Reminder != "" {
+		offset, ok := parseReminder(op.Reminder)
+		if !ok {
+			return nil, nil, fmt.Errorf("reminder must be HH:MM format (e.g. 09:00), got: %s", op.Reminder)
+		}
+		u.Reminder(offset)
+	}
 
 	env := writeEnvelope{id: op.UUID, action: 1, kind: "Task6", payload: u.build()}
 
@@ -1528,14 +1587,14 @@ Read commands (load state from cloud):
 Write commands (fast — skip state loading):
   create "Title" [--note ...] [--when today|anytime|someday|inbox]
          [--deadline YYYY-MM-DD] [--scheduled YYYY-MM-DD]
-         [--project UUID] [--heading UUID] [--area UUID]
+         [--reminder HH:MM] [--project UUID] [--heading UUID] [--area UUID]
          [--tags UUID,...] [--type task|project|heading] [--uuid UUID]
          [--checklist "Item 1,Item 2,..."]
   create-area "Name" [--tags UUID,...] [--uuid UUID]
   create-tag "Name" [--shorthand KEY] [--parent UUID]
   add-checklist <task-uuid> "Item 1,Item 2,Item 3"
   edit <uuid> [--title ...] [--note ...] [--when ...] [--deadline ...]
-         [--scheduled ...] [--area UUID] [--project UUID]
+         [--scheduled ...] [--reminder HH:MM|none] [--area UUID] [--project UUID]
          [--heading UUID] [--tags UUID,...] [--index N] [--today-index N]
   reorder <uuid> --index N [--today-index N]
   complete <uuid>
