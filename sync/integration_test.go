@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
+	"time"
 
 	things "github.com/arthursoares/things-cloud-sdk"
 )
@@ -158,9 +159,12 @@ func TestStateQueries(t *testing.T) {
 	defer syncer.Close()
 
 	// Create test data directly
+	completedAtRecent := time.Date(2026, 3, 5, 10, 30, 0, 0, time.UTC)
+	completedAtOlder := time.Date(2026, 3, 4, 8, 15, 0, 0, time.UTC)
 	syncer.saveTask(&things.Task{UUID: "inbox-1", Title: "Inbox Task", Schedule: things.TaskScheduleInbox, Status: things.TaskStatusPending})
 	syncer.saveTask(&things.Task{UUID: "anytime-1", Title: "Anytime Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusPending})
-	syncer.saveTask(&things.Task{UUID: "completed-1", Title: "Completed Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusCompleted})
+	syncer.saveTask(&things.Task{UUID: "completed-1", Title: "Completed Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusCompleted, CompletionDate: &completedAtRecent})
+	syncer.saveTask(&things.Task{UUID: "completed-2", Title: "Older Completed Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusCompleted, CompletionDate: &completedAtOlder})
 	syncer.saveTask(&things.Task{UUID: "trashed-1", Title: "Trashed Task", InTrash: true})
 	syncer.saveTask(&things.Task{UUID: "project-1", Title: "Test Project", Type: things.TaskTypeProject})
 
@@ -215,6 +219,33 @@ func TestStateQueries(t *testing.T) {
 		}
 		if projects[0].Type != things.TaskTypeProject {
 			t.Error("returned task is not a project")
+		}
+	})
+
+	t.Run("CompletedTasksInRange filters and orders by completion date", func(t *testing.T) {
+		after := time.Date(2026, 3, 5, 0, 0, 0, 0, time.UTC)
+		before := time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC)
+
+		tasks, err := state.CompletedTasksInRange(10, &after, &before)
+		if err != nil {
+			t.Fatalf("CompletedTasksInRange failed: %v", err)
+		}
+		if len(tasks) != 1 {
+			t.Fatalf("expected 1 task in date range, got %d", len(tasks))
+		}
+		if tasks[0].UUID != "completed-1" {
+			t.Fatalf("expected completed-1, got %s", tasks[0].UUID)
+		}
+
+		allCompleted, err := state.CompletedTasksInRange(10, nil, nil)
+		if err != nil {
+			t.Fatalf("CompletedTasksInRange(all) failed: %v", err)
+		}
+		if len(allCompleted) < 2 {
+			t.Fatalf("expected at least 2 completed tasks, got %d", len(allCompleted))
+		}
+		if allCompleted[0].UUID != "completed-1" || allCompleted[1].UUID != "completed-2" {
+			t.Fatalf("expected completed tasks ordered by completion date desc, got %s then %s", allCompleted[0].UUID, allCompleted[1].UUID)
 		}
 	})
 }

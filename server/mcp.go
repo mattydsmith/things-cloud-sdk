@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -24,6 +25,7 @@ type taskOutput struct {
 	Note         string   `json:"note,omitempty"`
 	Status       string   `json:"status"`
 	Type         string   `json:"type"`
+	CompletedAt  string   `json:"completed_at,omitempty"`
 	Deadline     string   `json:"deadline,omitempty"`
 	ScheduledFor string   `json:"scheduled_for,omitempty"`
 	ProjectID    string   `json:"project_id,omitempty"`
@@ -77,6 +79,9 @@ func formatTask(t *things.Task) taskOutput {
 	}
 	if t.DeadlineDate != nil {
 		o.Deadline = t.DeadlineDate.Format("2006-01-02")
+	}
+	if t.CompletionDate != nil {
+		o.CompletedAt = t.CompletionDate.UTC().Format(time.RFC3339)
 	}
 	if t.ScheduledDate != nil {
 		o.ScheduledFor = t.ScheduledDate.Format("2006-01-02")
@@ -140,6 +145,22 @@ func syncForMCPReadResult() *mcp.CallToolResult {
 		return mcp.NewToolResultError(fmt.Sprintf("pre-read sync failed: %v", err))
 	}
 	return nil
+}
+
+func parseDateOrRFC3339(raw, name string) (*time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		tt := t.UTC()
+		return &tt, nil
+	}
+	if t, err := time.Parse("2006-01-02", raw); err == nil {
+		tt := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		return &tt, nil
+	}
+	return nil, fmt.Errorf("%s must be RFC3339 or YYYY-MM-DD", name)
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +268,19 @@ func mcpListCompleted(_ context.Context, req mcp.CallToolRequest) (*mcp.CallTool
 		return syncErr, nil
 	}
 	limit := req.GetInt("limit", 50)
-	tasks, err := syncer.State().CompletedTasks(limit)
+	completedAfter, err := parseDateOrRFC3339(req.GetString("completed_after", ""), "completed_after")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	completedBefore, err := parseDateOrRFC3339(req.GetString("completed_before", ""), "completed_before")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if completedAfter != nil && completedBefore != nil && !completedAfter.Before(*completedBefore) {
+		return mcp.NewToolResultError("completed_after must be earlier than completed_before"), nil
+	}
+
+	tasks, err := syncer.State().CompletedTasksInRange(limit, completedAfter, completedBefore)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -804,6 +837,12 @@ func newMCPHandler() http.Handler {
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithNumber("limit",
 			mcp.Description("Maximum number of tasks to return (default 50)"),
+		),
+		mcp.WithString("completed_after",
+			mcp.Description("Optional lower bound for completion time (inclusive). Accepts RFC3339 or YYYY-MM-DD."),
+		),
+		mcp.WithString("completed_before",
+			mcp.Description("Optional upper bound for completion time (exclusive). Accepts RFC3339 or YYYY-MM-DD."),
 		),
 	), mcpListCompleted)
 

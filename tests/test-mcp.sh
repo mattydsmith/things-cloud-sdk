@@ -278,6 +278,7 @@ check "task in project" "$(has_uuid "$PROJ" "$CREATED_TASK")" "true"
 echo "--- List Completed ---"
 COMPLETED=$(mcp_call "things_list_completed" "{\"limit\":5}" | extract_text)
 check "completed returns array" "$(echo "$COMPLETED" | python3 -c "import sys,json; items=json.loads(sys.stdin.read()); print('ok' if isinstance(items, list) else 'fail')")" "ok"
+check "completed includes completed_at" "$(echo "$COMPLETED" | python3 -c "import sys,json; items=json.loads(sys.stdin.read()); print('ok' if (not items or all('completed_at' in i for i in items)) else 'fail')")" "ok"
 
 # --- cleanup ---
 

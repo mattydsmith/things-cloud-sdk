@@ -154,7 +154,7 @@ Each cycle creates test entities with a `[test-NNN]` prefix, runs checks, then c
 |---|------|-------|
 | 33 | `things_list_today` | Created task UUID appears in results |
 | 34 | `things_list_project_tasks` | Created task UUID appears in results |
-| 35 | `things_list_completed` | Returns valid array of completed tasks |
+| 35 | `things_list_completed` | Returns valid array; items include `completed_at` timestamp |
 
 ### Cleanup
 
@@ -289,4 +289,3 @@ Tests the JSON-RPC protocol layer independently from tool logic.
 - **Areas and tags can't be deleted** — the Things Cloud API has no trash/delete endpoint for these. Test cycles leave orphaned `[test-NNN] Area` and `[test-NNN] Tag` entries.
 - **Rate limiting** — Things Cloud returns HTTP 429 under rapid writes. All test scripts must include a delay (currently 1s) between MCP calls.
 - **No mocked tests** — all tests hit the live service. They require valid `THINGS_USERNAME`/`THINGS_PASSWORD` env vars on the server and a running deployment.
-

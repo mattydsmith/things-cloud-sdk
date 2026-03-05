@@ -179,12 +179,30 @@ func (st *State) TasksInArea(areaUUID string, opts QueryOpts) ([]*things.Task, e
 
 // CompletedTasks returns completed tasks, ordered by completion date (most recent first)
 func (st *State) CompletedTasks(limit int) ([]*things.Task, error) {
+	return st.CompletedTasksInRange(limit, nil, nil)
+}
+
+// CompletedTasksInRange returns completed tasks in an optional completion-date window.
+// completedAfter is inclusive, completedBefore is exclusive.
+func (st *State) CompletedTasksInRange(limit int, completedAfter, completedBefore *time.Time) ([]*things.Task, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	query := `SELECT uuid FROM tasks WHERE type = 0 AND status = 3 AND deleted = 0 AND in_trash = 0
-		ORDER BY completion_date DESC LIMIT ?`
-	rows, err := st.db.Query(query, limit)
+		AND completion_date IS NOT NULL`
+	args := []any{}
+	if completedAfter != nil {
+		query += " AND completion_date >= ?"
+		args = append(args, completedAfter.Unix())
+	}
+	if completedBefore != nil {
+		query += " AND completion_date < ?"
+		args = append(args, completedBefore.Unix())
+	}
+	query += ` ORDER BY completion_date DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := st.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

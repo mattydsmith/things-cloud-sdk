@@ -86,7 +86,7 @@ The `/mcp` endpoint implements the [Model Context Protocol](https://modelcontext
 | `things_list_tags` | All tags | — |
 | `things_list_project_tasks` | Tasks in a project | `project_uuid` |
 | `things_list_area_tasks` | Tasks in an area | `area_uuid` |
-| `things_list_completed` | Recently completed tasks | `limit` |
+| `things_list_completed` | Recently completed tasks (includes `completed_at`) | `limit`, `completed_after`, `completed_before` |
 | `things_list_checklist_items` | Checklist items for a task | `task_uuid` |
 | `things_get_task` | Get a single task | `uuid` |
 | `things_get_area` | Get a single area | `uuid` |
