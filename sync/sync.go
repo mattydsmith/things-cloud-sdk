@@ -5,6 +5,7 @@ package sync
 import (
 	"database/sql"
 	"strings"
+	gosync "sync"
 	"time"
 
 	things "github.com/arthursoares/things-cloud-sdk"
@@ -25,10 +26,11 @@ type dbExecutor interface {
 
 // Syncer manages persistent sync with Things Cloud
 type Syncer struct {
-	rawDB   *sql.DB     // underlying connection for Close() and Begin()
-	db      dbExecutor  // current executor (db or tx)
+	rawDB   *sql.DB    // underlying connection for Close() and Begin()
+	db      dbExecutor // current executor (db or tx)
 	client  *things.Client
 	history *things.History
+	mu      gosync.Mutex
 }
 
 // Open creates or opens a sync database and connects to Things Cloud
@@ -78,6 +80,9 @@ func isRetryableError(err error) bool {
 // Sync fetches new items from Things Cloud, updates local state,
 // and returns the list of changes in order
 func (s *Syncer) Sync() ([]Change, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Get current sync state first
 	storedHistoryID, startIndex, err := s.getSyncState()
 	if err != nil {
@@ -163,9 +168,8 @@ func (s *Syncer) Sync() ([]Change, error) {
 		}
 		allChanges = append(allChanges, changes...)
 
-		// Use server's current-item-index as next start position
-		// (not len(items) - items get expanded from nested structure)
-		startIndex = s.history.LatestServerIndex
+		// Advance to the next unread index from this page.
+		startIndex = s.history.LoadedServerIndex
 		hasMore = more
 	}
 

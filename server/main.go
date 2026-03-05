@@ -49,7 +49,10 @@ func handleSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleInbox(w http.ResponseWriter, r *http.Request) {
-	syncForRead()
+	if err := syncForRead(); err != nil {
+		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
 	state := syncer.State()
 	tasks, err := state.TasksInInbox(sync.QueryOpts{})
 	if err != nil {
@@ -64,7 +67,10 @@ func handleInbox(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleToday(w http.ResponseWriter, r *http.Request) {
-	syncForRead()
+	if err := syncForRead(); err != nil {
+		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
 	state := syncer.State()
 	tasks, err := state.TasksInToday(sync.QueryOpts{})
 	if err != nil {
@@ -79,7 +85,10 @@ func handleToday(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleProjects(w http.ResponseWriter, r *http.Request) {
-	syncForRead()
+	if err := syncForRead(); err != nil {
+		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
 	state := syncer.State()
 	projects, err := state.AllProjects(sync.QueryOpts{})
 	if err != nil {
@@ -94,7 +103,10 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAreas(w http.ResponseWriter, r *http.Request) {
-	syncForRead()
+	if err := syncForRead(); err != nil {
+		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
 	state := syncer.State()
 	areas, err := state.AllAreas()
 	if err != nil {
@@ -109,7 +121,10 @@ func handleAreas(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTags(w http.ResponseWriter, r *http.Request) {
-	syncForRead()
+	if err := syncForRead(); err != nil {
+		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
 	state := syncer.State()
 	tags, err := state.AllTags()
 	if err != nil {

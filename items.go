@@ -71,7 +71,9 @@ func (h *History) Items(opts ItemsOptions) ([]Item, bool, error) {
 			items = append(items, item)
 		}
 	}
-	h.LoadedServerIndex = h.LoadedServerIndex + len(v.Items)
+	// LoadedServerIndex tracks the next unread server index.
+	// It must be relative to the requested start index, not cumulative from zero.
+	h.LoadedServerIndex = opts.StartIndex + len(v.Items)
 	h.LatestServerIndex = v.CurrentItemIndex
 	h.EndTotalContentSize = v.EndTotalContentSize
 	h.LatestTotalContentSize = v.LatestTotalContentSize

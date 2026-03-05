@@ -117,7 +117,8 @@ func (st *State) TasksInInbox(opts QueryOpts) ([]*things.Task, error) {
 
 // TasksInToday returns tasks scheduled for today
 func (st *State) TasksInToday(opts QueryOpts) ([]*things.Task, error) {
-	today := time.Now().Truncate(24 * time.Hour)
+	nowUTC := time.Now().UTC()
+	today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 	tomorrow := today.Add(24 * time.Hour)
 
 	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 1
