@@ -196,8 +196,9 @@ type Task struct {
 	InTrash         bool
 	Schedule        TaskSchedule
 	Type            TaskType
-	TodayIndex      int
-	DueOrder        int
+	TodayIndex          int
+	TodayIndexReference *time.Time // tir: when set to today, task appears in Today view
+	DueOrder            int
 	AlarmTimeOffset *int
 	TagIDs          []string
 	RecurrenceIDs   []string

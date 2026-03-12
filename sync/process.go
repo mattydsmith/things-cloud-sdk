@@ -373,6 +373,7 @@ func applyTaskPayload(old *things.Task, uuid string, p things.TaskActionItemPayl
 		t.Schedule = old.Schedule
 		t.Type = old.Type
 		t.TodayIndex = old.TodayIndex
+		t.TodayIndexReference = old.TodayIndexReference
 		t.DueOrder = old.DueOrder
 		t.AlarmTimeOffset = old.AlarmTimeOffset
 		t.TagIDs = old.TagIDs
@@ -397,8 +398,9 @@ func applyTaskPayload(old *things.Task, uuid string, p things.TaskActionItemPayl
 		t.ScheduledDate = p.ScheduledDate.Time()
 	}
 	if p.TaskIR != nil {
-		// TaskIR (tir) is an alternative scheduled date field
-		t.ScheduledDate = p.TaskIR.Time()
+		// TaskIR (tir) is the today-index-reference date; when set to today,
+		// the task appears in the Today view regardless of sr value.
+		t.TodayIndexReference = p.TaskIR.Time()
 	}
 	if p.CompletionDate != nil {
 		t.CompletionDate = p.CompletionDate.Time()

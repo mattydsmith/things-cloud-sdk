@@ -27,8 +27,9 @@ type taskOutput struct {
 	Type         string   `json:"type"`
 	CompletedAt  string   `json:"completed_at,omitempty"`
 	Deadline     string   `json:"deadline,omitempty"`
-	ScheduledFor string   `json:"scheduled_for,omitempty"`
-	ProjectID    string   `json:"project_id,omitempty"`
+	ScheduledFor     string   `json:"scheduled_for,omitempty"`
+	TodayIndexRef    string   `json:"today_index_ref,omitempty"`
+	ProjectID        string   `json:"project_id,omitempty"`
 	AreaID       string   `json:"area_id,omitempty"`
 	Tags         []string `json:"tags,omitempty"`
 }
@@ -85,6 +86,9 @@ func formatTask(t *things.Task) taskOutput {
 	}
 	if t.ScheduledDate != nil {
 		o.ScheduledFor = t.ScheduledDate.Format("2006-01-02")
+	}
+	if t.TodayIndexReference != nil {
+		o.TodayIndexRef = t.TodayIndexReference.Format("2006-01-02")
 	}
 	if len(t.ParentTaskIDs) > 0 {
 		o.ProjectID = t.ParentTaskIDs[0]
