@@ -303,6 +303,25 @@ func TestDetectTaskChanges(t *testing.T) {
 		}
 	})
 
+	t.Run("task moved to today via tir", func(t *testing.T) {
+		t.Parallel()
+		today := time.Now()
+		old := &things.Task{UUID: "t1", Title: "Task", Schedule: things.TaskScheduleInbox}
+		new := &things.Task{UUID: "t1", Title: "Task", Schedule: things.TaskScheduleAnytime, TodayIndexReference: &today}
+		changes := detectTaskChanges(old, new, 1, now)
+
+		found := false
+		for _, c := range changes {
+			if _, ok := c.(TaskMovedToToday); ok {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected TaskMovedToToday change")
+		}
+	})
+
 	t.Run("task moved to inbox", func(t *testing.T) {
 		t.Parallel()
 		old := &things.Task{UUID: "t1", Title: "Task", Schedule: things.TaskScheduleAnytime}
@@ -1049,6 +1068,16 @@ func TestTaskLocation(t *testing.T) {
 		}
 	})
 
+	t.Run("anytime schedule with today tir", func(t *testing.T) {
+		t.Parallel()
+		today := time.Now()
+		task := &things.Task{Schedule: things.TaskScheduleAnytime, TodayIndexReference: &today}
+		loc := taskLocation(task)
+		if loc != LocationToday {
+			t.Errorf("expected LocationToday, got %v", loc)
+		}
+	})
+
 	t.Run("someday schedule without date", func(t *testing.T) {
 		t.Parallel()
 		task := &things.Task{Schedule: things.TaskScheduleSomeday}
@@ -1062,6 +1091,16 @@ func TestTaskLocation(t *testing.T) {
 		t.Parallel()
 		futureDate := time.Now().AddDate(0, 0, 7)
 		task := &things.Task{Schedule: things.TaskScheduleSomeday, ScheduledDate: &futureDate}
+		loc := taskLocation(task)
+		if loc != LocationUpcoming {
+			t.Errorf("expected LocationUpcoming, got %v", loc)
+		}
+	})
+
+	t.Run("someday schedule with future tir", func(t *testing.T) {
+		t.Parallel()
+		futureDate := time.Now().AddDate(0, 0, 7)
+		task := &things.Task{Schedule: things.TaskScheduleSomeday, TodayIndexReference: &futureDate}
 		loc := taskLocation(task)
 		if loc != LocationUpcoming {
 			t.Errorf("expected LocationUpcoming, got %v", loc)

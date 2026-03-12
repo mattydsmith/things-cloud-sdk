@@ -1,6 +1,6 @@
 package sync
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 const schema = `
 -- Schema version tracking
@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     heading_uuid TEXT,
     alarm_time_offset INTEGER,
     recurrence_rule TEXT,
+    today_index_ref INTEGER,
     deleted INTEGER DEFAULT 0
 );
 
@@ -100,6 +101,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
 CREATE INDEX IF NOT EXISTS idx_tasks_schedule ON tasks(schedule);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_scheduled_date ON tasks(scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_today_index_ref ON tasks(today_index_ref);
 CREATE INDEX IF NOT EXISTS idx_tasks_in_trash ON tasks(in_trash);
 CREATE INDEX IF NOT EXISTS idx_tasks_deleted ON tasks(deleted);
 CREATE INDEX IF NOT EXISTS idx_tasks_area_uuid ON tasks(area_uuid);
@@ -123,6 +125,12 @@ CREATE INDEX IF NOT EXISTS idx_tasks_project_uuid ON tasks(project_uuid);
 CREATE INDEX IF NOT EXISTS idx_checklist_items_task_uuid ON checklist_items(task_uuid);
 `
 
+// migration3 adds today_index_ref column to store tir separately from sr.
+const migration3 = `
+ALTER TABLE tasks ADD COLUMN today_index_ref INTEGER;
+CREATE INDEX IF NOT EXISTS idx_tasks_today_index_ref ON tasks(today_index_ref);
+`
+
 func (s *Syncer) migrate() error {
 	// Check current version
 	var version int
@@ -144,6 +152,11 @@ func (s *Syncer) migrate() error {
 	// Incremental migrations
 	if version < 2 {
 		if _, err := s.db.Exec(migration2); err != nil {
+			return err
+		}
+	}
+	if version < 3 {
+		if _, err := s.db.Exec(migration3); err != nil {
 			return err
 		}
 	}

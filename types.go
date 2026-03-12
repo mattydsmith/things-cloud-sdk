@@ -70,8 +70,8 @@ var (
 	// ItemKindSettings  identifies a setting
 	ItemKindSettings ItemKind = "Settings3"
 	// ItemKindTag identifies a Tag
-	ItemKindTag      ItemKind = "Tag3"
-	ItemKindTag4     ItemKind = "Tag4"
+	ItemKindTag       ItemKind = "Tag3"
+	ItemKindTag4      ItemKind = "Tag4"
 	ItemKindTagPlain  ItemKind = "Tag"
 	ItemKindTombstone ItemKind = "Tombstone2"
 )
@@ -180,52 +180,53 @@ const (
 // 33|nextInstanceStartDate|REAL|0||0
 // 34|dueDateSuppressionDate|REAL|0||0
 type Task struct {
-	UUID             string
-	CreationDate     time.Time
-	ModificationDate *time.Time
-	Status           TaskStatus
-	Title            string
-	Note             string
-	ScheduledDate    *time.Time
-	CompletionDate   *time.Time
-	DeadlineDate     *time.Time
-	Index            int
-	AreaIDs          []string
-	ParentTaskIDs    []string
-	ActionGroupIDs   []string
-	InTrash         bool
-	Schedule        TaskSchedule
-	Type            TaskType
-	TodayIndex      int
-	DueOrder        int
-	AlarmTimeOffset *int
-	TagIDs          []string
-	RecurrenceIDs   []string
-	DelegateIDs     []string
+	UUID                string
+	CreationDate        time.Time
+	ModificationDate    *time.Time
+	Status              TaskStatus
+	Title               string
+	Note                string
+	ScheduledDate       *time.Time
+	CompletionDate      *time.Time
+	DeadlineDate        *time.Time
+	Index               int
+	AreaIDs             []string
+	ParentTaskIDs       []string
+	ActionGroupIDs      []string
+	InTrash             bool
+	Schedule            TaskSchedule
+	Type                TaskType
+	TodayIndex          int
+	TodayIndexReference *time.Time // tir: when set to today, task appears in Today view
+	DueOrder            int
+	AlarmTimeOffset     *int
+	TagIDs              []string
+	RecurrenceIDs       []string
+	DelegateIDs         []string
 }
 
 // TaskActionItemPayload describes the payload for modifying Tasks, and also Projects,
 // as projects are special kind of Tasks
 type TaskActionItemPayload struct {
-	Index             *int                   `json:"ix,omitempty"`
-	CreationDate      *Timestamp             `json:"cd,omitempty"`
-	ModificationDate  *Timestamp             `json:"md,omitempty"` // ok
-	ScheduledDate     *Timestamp             `json:"sr,omitempty"`
-	CompletionDate    *Timestamp             `json:"sp,omitempty"`
-	DeadlineDate      *Timestamp             `json:"dd,omitempty"`  //
-	TaskIR            *Timestamp             `json:"tir,omitempty"` // hm, not sure what tir stands for
-	Status            *TaskStatus            `json:"ss,omitempty"`
-	Type              *TaskType              `json:"tp,omitempty"`
-	Title             *string                `json:"tt,omitempty"`
-	Note              json.RawMessage        `json:"nt,omitempty"`
-	AreaIDs           *[]string              `json:"ar,omitempty"`
-	ParentTaskIDs     *[]string              `json:"pr,omitempty"`
-	TagIDs            []string               `json:"tg,omitempty"`
-	InTrash           *bool                  `json:"tr,omitempty"`
-	TaskIndex         *int                   `json:"ti,omitempty"`
-	RecurrenceTaskIDs *[]string              `json:"rt,omitempty"`
-	Schedule          *TaskSchedule          `json:"st,omitempty"`
-	ActionGroupIDs    *[]string              `json:"agr,omitempty"`
+	Index                     *int                   `json:"ix,omitempty"`
+	CreationDate              *Timestamp             `json:"cd,omitempty"`
+	ModificationDate          *Timestamp             `json:"md,omitempty"` // ok
+	ScheduledDate             *Timestamp             `json:"sr,omitempty"`
+	CompletionDate            *Timestamp             `json:"sp,omitempty"`
+	DeadlineDate              *Timestamp             `json:"dd,omitempty"`  //
+	TaskIR                    *Timestamp             `json:"tir,omitempty"` // hm, not sure what tir stands for
+	Status                    *TaskStatus            `json:"ss,omitempty"`
+	Type                      *TaskType              `json:"tp,omitempty"`
+	Title                     *string                `json:"tt,omitempty"`
+	Note                      json.RawMessage        `json:"nt,omitempty"`
+	AreaIDs                   *[]string              `json:"ar,omitempty"`
+	ParentTaskIDs             *[]string              `json:"pr,omitempty"`
+	TagIDs                    []string               `json:"tg,omitempty"`
+	InTrash                   *bool                  `json:"tr,omitempty"`
+	TaskIndex                 *int                   `json:"ti,omitempty"`
+	RecurrenceTaskIDs         *[]string              `json:"rt,omitempty"`
+	Schedule                  *TaskSchedule          `json:"st,omitempty"`
+	ActionGroupIDs            *[]string              `json:"agr,omitempty"`
 	Repeater                  *RepeaterConfiguration `json:"rr,omitempty"`
 	DueOrder                  *int                   `json:"do,omitempty"`
 	Leavable                  *bool                  `json:"lt,omitempty"`
@@ -240,6 +241,10 @@ type TaskActionItemPayload struct {
 	ActionRequiredDate        *Timestamp             `json:"acrd,omitempty"`
 	DeadlineSuppression       *Timestamp             `json:"dds,omitempty"`
 	ExtensionData             json.RawMessage        `json:"xx,omitempty"`
+	scheduledDateSet          bool                   `json:"-"`
+	completionDateSet         bool                   `json:"-"`
+	deadlineDateSet           bool                   `json:"-"`
+	taskIRSet                 bool                   `json:"-"`
 	//  {
 	//      "acrd": null,
 	//      "ar": [],
@@ -273,6 +278,48 @@ type TaskActionItemPayload struct {
 	//  },
 }
 
+// UnmarshalJSON preserves whether nullable date fields were explicitly present,
+// allowing callers to distinguish "clear this field" from "leave unchanged".
+func (p *TaskActionItemPayload) UnmarshalJSON(bs []byte) error {
+	type payloadAlias TaskActionItemPayload
+
+	var aux payloadAlias
+	if err := json.Unmarshal(bs, &aux); err != nil {
+		return err
+	}
+	*p = TaskActionItemPayload(aux)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(bs, &raw); err != nil {
+		return err
+	}
+	_, p.scheduledDateSet = raw["sr"]
+	_, p.completionDateSet = raw["sp"]
+	_, p.deadlineDateSet = raw["dd"]
+	_, p.taskIRSet = raw["tir"]
+	return nil
+}
+
+// HasScheduledDate reports whether the payload explicitly included sr.
+func (p TaskActionItemPayload) HasScheduledDate() bool {
+	return p.scheduledDateSet || p.ScheduledDate != nil
+}
+
+// HasCompletionDate reports whether the payload explicitly included sp.
+func (p TaskActionItemPayload) HasCompletionDate() bool {
+	return p.completionDateSet || p.CompletionDate != nil
+}
+
+// HasDeadlineDate reports whether the payload explicitly included dd.
+func (p TaskActionItemPayload) HasDeadlineDate() bool {
+	return p.deadlineDateSet || p.DeadlineDate != nil
+}
+
+// HasTaskIR reports whether the payload explicitly included tir.
+func (p TaskActionItemPayload) HasTaskIR() bool {
+	return p.taskIRSet || p.TaskIR != nil
+}
+
 // TaskActionItem describes an event on a Task
 type TaskActionItem struct {
 	Item
@@ -301,9 +348,9 @@ type Tag struct {
 // TagActionItemPayload describes the payload for modifying Areas
 type TagActionItemPayload struct {
 	IX            *int            `json:"ix"`
-	Title         *string        `json:"tt"`
-	ShortHand     *string        `json:"sh"`
-	ParentTagIDs  *[]string      `json:"pn"`
+	Title         *string         `json:"tt"`
+	ShortHand     *string         `json:"sh"`
+	ParentTagIDs  *[]string       `json:"pn"`
 	ExtensionData json.RawMessage `json:"xx,omitempty"`
 }
 
@@ -356,14 +403,14 @@ func (item AreaActionItem) UUID() string {
 }
 
 // CheckListItem describes a check list item
-//0|uuid|TEXT|0||1
-//1|userModificationDate|REAL|0||0
-//2|creationDate|REAL|0||0
-//3|title|TEXT|0||0
-//4|status|INTEGER|0||0
-//5|stopDate|REAL|0||0
-//6|index|INTEGER|0||0
-//7|task|TEXT|0||0
+// 0|uuid|TEXT|0||1
+// 1|userModificationDate|REAL|0||0
+// 2|creationDate|REAL|0||0
+// 3|title|TEXT|0||0
+// 4|status|INTEGER|0||0
+// 5|stopDate|REAL|0||0
+// 6|index|INTEGER|0||0
+// 7|task|TEXT|0||0
 type CheckListItem struct {
 	UUID             string
 	CreationDate     time.Time
@@ -377,11 +424,11 @@ type CheckListItem struct {
 
 // CheckListActionItemPayload describes the payload for modifying CheckListItems
 type CheckListActionItemPayload struct {
-	CreationDate     *Timestamp  `json:"cd,omitempty"`
-	ModificationDate *Timestamp  `json:"md,omitempty"`
-	Index            *int        `json:"ix"`
-	Status           *TaskStatus `json:"ss,omitempty"`
-	Title            *string     `json:"tt,omitempty"`
+	CreationDate     *Timestamp      `json:"cd,omitempty"`
+	ModificationDate *Timestamp      `json:"md,omitempty"`
+	Index            *int            `json:"ix"`
+	Status           *TaskStatus     `json:"ss,omitempty"`
+	Title            *string         `json:"tt,omitempty"`
 	CompletionDate   *Timestamp      `json:"sp,omitempty"`
 	TaskIDs          *[]string       `json:"ts,omitempty"`
 	Leavable         *bool           `json:"lt,omitempty"`

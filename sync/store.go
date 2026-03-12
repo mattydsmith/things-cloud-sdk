@@ -15,7 +15,7 @@ func (s *Syncer) getTask(uuid string) (*things.Task, error) {
 			uuid, type, title, note, status, schedule,
 			scheduled_date, deadline_date, completion_date, creation_date, modification_date,
 			"index", today_index, in_trash, area_uuid, project_uuid, heading_uuid,
-			alarm_time_offset, recurrence_rule, deleted
+			alarm_time_offset, recurrence_rule, today_index_ref, deleted
 		FROM tasks
 		WHERE uuid = ?
 	`, uuid)
@@ -36,6 +36,7 @@ func (s *Syncer) getTask(uuid string) (*things.Task, error) {
 		headingUUID      sql.NullString
 		alarmTimeOffset  sql.NullInt64
 		recurrenceRule   sql.NullString
+		todayIndexRef    sql.NullInt64
 		deleted          int
 	)
 
@@ -43,7 +44,7 @@ func (s *Syncer) getTask(uuid string) (*things.Task, error) {
 		&t.UUID, &taskType, &t.Title, &t.Note, &status, &schedule,
 		&scheduledDate, &deadlineDate, &completionDate, &creationDate, &modificationDate,
 		&t.Index, &t.TodayIndex, &inTrash, &areaUUID, &projectUUID, &headingUUID,
-		&alarmTimeOffset, &recurrenceRule, &deleted,
+		&alarmTimeOffset, &recurrenceRule, &todayIndexRef, &deleted,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -77,6 +78,10 @@ func (s *Syncer) getTask(uuid string) (*things.Task, error) {
 	if modificationDate.Valid {
 		ts := time.Unix(modificationDate.Int64, 0).UTC()
 		t.ModificationDate = &ts
+	}
+	if todayIndexRef.Valid {
+		ts := time.Unix(todayIndexRef.Int64, 0).UTC()
+		t.TodayIndexReference = &ts
 	}
 
 	// Convert nullable foreign keys to slices
@@ -157,6 +162,12 @@ func (s *Syncer) saveTask(t *things.Task) error {
 		alarmTimeOffset = sql.NullInt64{Int64: int64(*t.AlarmTimeOffset), Valid: true}
 	}
 
+	// Convert today index reference (tir)
+	var todayIndexRef sql.NullInt64
+	if t.TodayIndexReference != nil {
+		todayIndexRef = sql.NullInt64{Int64: t.TodayIndexReference.Unix(), Valid: true}
+	}
+
 	// Convert InTrash to integer
 	var inTrash int
 	if t.InTrash {
@@ -169,13 +180,13 @@ func (s *Syncer) saveTask(t *things.Task) error {
 			uuid, type, title, note, status, schedule,
 			scheduled_date, deadline_date, completion_date, creation_date, modification_date,
 			"index", today_index, in_trash, area_uuid, project_uuid, heading_uuid,
-			alarm_time_offset, recurrence_rule, deleted
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+			alarm_time_offset, recurrence_rule, today_index_ref, deleted
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
 	`,
 		t.UUID, int(t.Type), t.Title, t.Note, int(t.Status), int(t.Schedule),
 		scheduledDate, deadlineDate, completionDate, creationDate, modificationDate,
 		t.Index, t.TodayIndex, inTrash, areaUUID, projectUUID, headingUUID,
-		alarmTimeOffset, sql.NullString{}, // recurrence_rule not directly on Task struct
+		alarmTimeOffset, sql.NullString{}, todayIndexRef, // recurrence_rule not directly on Task struct
 	)
 	if err != nil {
 		return err

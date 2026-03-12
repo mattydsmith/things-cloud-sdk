@@ -161,8 +161,10 @@ func TestStateQueries(t *testing.T) {
 	// Create test data directly
 	completedAtRecent := time.Date(2026, 3, 5, 10, 30, 0, 0, time.UTC)
 	completedAtOlder := time.Date(2026, 3, 4, 8, 15, 0, 0, time.UTC)
+	todayRef := time.Now().UTC()
 	syncer.saveTask(&things.Task{UUID: "inbox-1", Title: "Inbox Task", Schedule: things.TaskScheduleInbox, Status: things.TaskStatusPending})
 	syncer.saveTask(&things.Task{UUID: "anytime-1", Title: "Anytime Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusPending})
+	syncer.saveTask(&things.Task{UUID: "today-ref-1", Title: "Today via tir", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusPending, TodayIndexReference: &todayRef})
 	syncer.saveTask(&things.Task{UUID: "completed-1", Title: "Completed Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusCompleted, CompletionDate: &completedAtRecent})
 	syncer.saveTask(&things.Task{UUID: "completed-2", Title: "Older Completed Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusCompleted, CompletionDate: &completedAtOlder})
 	syncer.saveTask(&things.Task{UUID: "trashed-1", Title: "Trashed Task", InTrash: true})
@@ -222,6 +224,19 @@ func TestStateQueries(t *testing.T) {
 		}
 	})
 
+	t.Run("TasksInToday includes tir-only tasks", func(t *testing.T) {
+		tasks, err := state.TasksInToday(QueryOpts{})
+		if err != nil {
+			t.Fatalf("TasksInToday failed: %v", err)
+		}
+		if len(tasks) != 1 {
+			t.Fatalf("expected 1 today task, got %d", len(tasks))
+		}
+		if tasks[0].UUID != "today-ref-1" {
+			t.Fatalf("expected today-ref-1, got %s", tasks[0].UUID)
+		}
+	})
+
 	t.Run("CompletedTasksInRange filters and orders by completion date", func(t *testing.T) {
 		after := time.Date(2026, 3, 5, 0, 0, 0, 0, time.UTC)
 		before := time.Date(2026, 3, 6, 0, 0, 0, 0, time.UTC)
@@ -248,4 +263,65 @@ func TestStateQueries(t *testing.T) {
 			t.Fatalf("expected completed tasks ordered by completion date desc, got %s then %s", allCompleted[0].UUID, allCompleted[1].UUID)
 		}
 	})
+}
+
+func TestProcessTaskClearsNullableDates(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	syncer, err := Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer syncer.Close()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	scheduled := now.Add(24 * time.Hour)
+	deadline := now.Add(48 * time.Hour)
+	completion := now.Add(72 * time.Hour)
+
+	if err := syncer.saveTask(&things.Task{
+		UUID:                "task-clear-dates",
+		Title:               "Task",
+		Schedule:            things.TaskScheduleAnytime,
+		Type:                things.TaskTypeTask,
+		CreationDate:        now,
+		ScheduledDate:       &scheduled,
+		TodayIndexReference: &scheduled,
+		DeadlineDate:        &deadline,
+		CompletionDate:      &completion,
+	}); err != nil {
+		t.Fatalf("saveTask failed: %v", err)
+	}
+
+	item := things.Item{
+		UUID:   "task-clear-dates",
+		Kind:   things.ItemKindTask,
+		Action: things.ItemActionModified,
+		P:      json.RawMessage(`{"sr":null,"tir":null,"dd":null,"sp":null}`),
+	}
+
+	if _, err := syncer.processItems([]things.Item{item}, 1); err != nil {
+		t.Fatalf("processItems failed: %v", err)
+	}
+
+	task, err := syncer.State().Task("task-clear-dates")
+	if err != nil {
+		t.Fatalf("Task lookup failed: %v", err)
+	}
+	if task == nil {
+		t.Fatal("task not found")
+	}
+	if task.ScheduledDate != nil {
+		t.Error("expected ScheduledDate to be cleared")
+	}
+	if task.TodayIndexReference != nil {
+		t.Error("expected TodayIndexReference to be cleared")
+	}
+	if task.DeadlineDate != nil {
+		t.Error("expected DeadlineDate to be cleared")
+	}
+	if task.CompletionDate != nil {
+		t.Error("expected CompletionDate to be cleared")
+	}
 }

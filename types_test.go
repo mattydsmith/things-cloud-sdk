@@ -118,6 +118,12 @@ func TestTaskActionItemPayload_AllFields(t *testing.T) {
 	if p.DueOrder == nil || *p.DueOrder != 0 {
 		t.Error("expected DueOrder=0")
 	}
+	if !p.HasScheduledDate() || p.ScheduledDate == nil {
+		t.Error("expected ScheduledDate to be set")
+	}
+	if !p.HasTaskIR() || p.TaskIR == nil {
+		t.Error("expected TaskIR to be set")
+	}
 	if p.AlarmTimeOffset == nil || *p.AlarmTimeOffset != 39600 {
 		t.Error("expected AlarmTimeOffset=39600")
 	}
@@ -129,6 +135,28 @@ func TestTaskActionItemPayload_AllFields(t *testing.T) {
 	}
 	if p.ExtensionData == nil {
 		t.Error("expected ExtensionData to be set")
+	}
+}
+
+func TestTaskActionItemPayload_NullableDatePresence(t *testing.T) {
+	raw := `{"sr":null,"sp":null,"tir":null}`
+
+	var p TaskActionItemPayload
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if !p.HasScheduledDate() || p.ScheduledDate != nil {
+		t.Error("expected ScheduledDate to be explicitly present and nil")
+	}
+	if !p.HasCompletionDate() || p.CompletionDate != nil {
+		t.Error("expected CompletionDate to be explicitly present and nil")
+	}
+	if !p.HasTaskIR() || p.TaskIR != nil {
+		t.Error("expected TaskIR to be explicitly present and nil")
+	}
+	if p.HasDeadlineDate() {
+		t.Error("did not expect DeadlineDate to be marked present")
 	}
 }
 

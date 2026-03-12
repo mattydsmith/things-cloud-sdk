@@ -115,14 +115,22 @@ func (st *State) TasksInInbox(opts QueryOpts) ([]*things.Task, error) {
 	return st.queryTasks(query)
 }
 
-// TasksInToday returns tasks scheduled for today
+// TasksInToday returns tasks in the Today view. A task appears in Today when
+// schedule=1 (started/anytime) AND either sr (scheduled_date) or tir
+// (today_index_ref) falls on today's date.
 func (st *State) TasksInToday(opts QueryOpts) ([]*things.Task, error) {
 	nowUTC := time.Now().UTC()
 	today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 	tomorrow := today.Add(24 * time.Hour)
 
+	todayUnix := today.Unix()
+	tomorrowUnix := tomorrow.Unix()
+
 	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 1
-		AND scheduled_date >= ? AND scheduled_date < ? AND deleted = 0`
+		AND (
+			(scheduled_date >= ? AND scheduled_date < ?)
+			OR (today_index_ref >= ? AND today_index_ref < ?)
+		) AND deleted = 0`
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"
 	}
@@ -131,7 +139,7 @@ func (st *State) TasksInToday(opts QueryOpts) ([]*things.Task, error) {
 	}
 	query += ` ORDER BY today_index, "index"`
 
-	rows, err := st.db.Query(query, today.Unix(), tomorrow.Unix())
+	rows, err := st.db.Query(query, todayUnix, tomorrowUnix, todayUnix, tomorrowUnix)
 	if err != nil {
 		return nil, err
 	}

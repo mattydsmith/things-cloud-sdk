@@ -135,16 +135,17 @@ func taskLocation(t *things.Task) TaskLocation {
 	if t == nil {
 		return LocationUnknown
 	}
+	now := time.Now()
 	switch t.Schedule {
 	case things.TaskScheduleInbox:
 		return LocationInbox
 	case things.TaskScheduleAnytime:
-		if t.ScheduledDate != nil && isToday(t.ScheduledDate) {
+		if isToday(t.ScheduledDate) || isToday(t.TodayIndexReference) {
 			return LocationToday
 		}
 		return LocationAnytime
 	case things.TaskScheduleSomeday:
-		if t.ScheduledDate != nil && t.ScheduledDate.After(time.Now()) {
+		if isFutureAt(t.ScheduledDate, now) || isFutureAt(t.TodayIndexReference, now) {
 			return LocationUpcoming
 		}
 		return LocationSomeday
@@ -158,6 +159,10 @@ func isToday(t *time.Time) bool {
 	}
 	now := time.Now()
 	return t.Year() == now.Year() && t.YearDay() == now.YearDay()
+}
+
+func isFutureAt(t *time.Time, now time.Time) bool {
+	return t != nil && t.After(now)
 }
 
 func timeEqual(a, b *time.Time) bool {

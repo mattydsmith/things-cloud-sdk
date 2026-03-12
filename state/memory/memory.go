@@ -56,14 +56,29 @@ func (s *State) updateTask(item things.TaskActionItem) *things.Task {
 	if item.P.Schedule != nil {
 		t.Schedule = *item.P.Schedule
 	}
-	if item.P.ScheduledDate != nil {
-		t.ScheduledDate = item.P.ScheduledDate.Time()
+	if item.P.HasScheduledDate() {
+		t.ScheduledDate = nil
+		if item.P.ScheduledDate != nil {
+			t.ScheduledDate = item.P.ScheduledDate.Time()
+		}
 	}
-	if item.P.CompletionDate != nil {
-		t.CompletionDate = item.P.CompletionDate.Time()
+	if item.P.HasTaskIR() {
+		t.TodayIndexReference = nil
+		if item.P.TaskIR != nil {
+			t.TodayIndexReference = item.P.TaskIR.Time()
+		}
 	}
-	if item.P.DeadlineDate != nil {
-		t.DeadlineDate = item.P.DeadlineDate.Time()
+	if item.P.HasCompletionDate() {
+		t.CompletionDate = nil
+		if item.P.CompletionDate != nil {
+			t.CompletionDate = item.P.CompletionDate.Time()
+		}
+	}
+	if item.P.HasDeadlineDate() {
+		t.DeadlineDate = nil
+		if item.P.DeadlineDate != nil {
+			t.DeadlineDate = item.P.DeadlineDate.Time()
+		}
 	}
 	if item.P.CreationDate != nil {
 		cd := item.P.CreationDate.Time()

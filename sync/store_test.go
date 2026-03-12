@@ -80,31 +80,33 @@ func TestTaskStorage(t *testing.T) {
 	t.Run("save task with all optional fields", func(t *testing.T) {
 		now := time.Now().Truncate(time.Second).UTC()
 		scheduled := now.Add(24 * time.Hour)
+		todayRef := now.Add(48 * time.Hour)
 		deadline := now.Add(48 * time.Hour)
 		completion := now.Add(time.Hour)
 		modification := now.Add(30 * time.Minute)
 		alarmOffset := 3600
 
 		task := &things.Task{
-			UUID:             "task-full",
-			Title:            "Full Task",
-			Note:             "Detailed notes here",
-			Status:           things.TaskStatusCompleted,
-			Schedule:         things.TaskScheduleSomeday,
-			Type:             things.TaskTypeProject,
-			CreationDate:     now,
-			ModificationDate: &modification,
-			ScheduledDate:    &scheduled,
-			DeadlineDate:     &deadline,
-			CompletionDate:   &completion,
-			Index:            5,
-			TodayIndex:       3,
-			InTrash:          true,
-			AreaIDs:          []string{"area-1"},
-			ParentTaskIDs:    []string{"project-1"},
-			ActionGroupIDs:   []string{"heading-1"},
-			AlarmTimeOffset:  &alarmOffset,
-			TagIDs:           []string{"tag-a", "tag-b", "tag-c"},
+			UUID:                "task-full",
+			Title:               "Full Task",
+			Note:                "Detailed notes here",
+			Status:              things.TaskStatusCompleted,
+			Schedule:            things.TaskScheduleSomeday,
+			Type:                things.TaskTypeProject,
+			CreationDate:        now,
+			ModificationDate:    &modification,
+			ScheduledDate:       &scheduled,
+			TodayIndexReference: &todayRef,
+			DeadlineDate:        &deadline,
+			CompletionDate:      &completion,
+			Index:               5,
+			TodayIndex:          3,
+			InTrash:             true,
+			AreaIDs:             []string{"area-1"},
+			ParentTaskIDs:       []string{"project-1"},
+			ActionGroupIDs:      []string{"heading-1"},
+			AlarmTimeOffset:     &alarmOffset,
+			TagIDs:              []string{"tag-a", "tag-b", "tag-c"},
 		}
 
 		if err := syncer.saveTask(task); err != nil {
@@ -157,6 +159,9 @@ func TestTaskStorage(t *testing.T) {
 		// Verify dates (compare Unix timestamps to avoid timezone issues)
 		if retrieved.ScheduledDate == nil || retrieved.ScheduledDate.Unix() != scheduled.Unix() {
 			t.Errorf("ScheduledDate mismatch")
+		}
+		if retrieved.TodayIndexReference == nil || retrieved.TodayIndexReference.Unix() != todayRef.Unix() {
+			t.Errorf("TodayIndexReference mismatch")
 		}
 		if retrieved.DeadlineDate == nil || retrieved.DeadlineDate.Unix() != deadline.Unix() {
 			t.Errorf("DeadlineDate mismatch")

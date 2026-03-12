@@ -373,6 +373,7 @@ func applyTaskPayload(old *things.Task, uuid string, p things.TaskActionItemPayl
 		t.Schedule = old.Schedule
 		t.Type = old.Type
 		t.TodayIndex = old.TodayIndex
+		t.TodayIndexReference = old.TodayIndexReference
 		t.DueOrder = old.DueOrder
 		t.AlarmTimeOffset = old.AlarmTimeOffset
 		t.TagIDs = old.TagIDs
@@ -393,18 +394,31 @@ func applyTaskPayload(old *things.Task, uuid string, p things.TaskActionItemPayl
 	if p.Title != nil {
 		t.Title = *p.Title
 	}
-	if p.ScheduledDate != nil {
-		t.ScheduledDate = p.ScheduledDate.Time()
+	if p.HasScheduledDate() {
+		t.ScheduledDate = nil
+		if p.ScheduledDate != nil {
+			t.ScheduledDate = p.ScheduledDate.Time()
+		}
 	}
-	if p.TaskIR != nil {
-		// TaskIR (tir) is an alternative scheduled date field
-		t.ScheduledDate = p.TaskIR.Time()
+	if p.HasTaskIR() {
+		// TaskIR (tir) is the today-index-reference date; when set to today,
+		// the task appears in the Today view regardless of sr value.
+		t.TodayIndexReference = nil
+		if p.TaskIR != nil {
+			t.TodayIndexReference = p.TaskIR.Time()
+		}
 	}
-	if p.CompletionDate != nil {
-		t.CompletionDate = p.CompletionDate.Time()
+	if p.HasCompletionDate() {
+		t.CompletionDate = nil
+		if p.CompletionDate != nil {
+			t.CompletionDate = p.CompletionDate.Time()
+		}
 	}
-	if p.DeadlineDate != nil {
-		t.DeadlineDate = p.DeadlineDate.Time()
+	if p.HasDeadlineDate() {
+		t.DeadlineDate = nil
+		if p.DeadlineDate != nil {
+			t.DeadlineDate = p.DeadlineDate.Time()
+		}
 	}
 	if p.Index != nil {
 		t.Index = *p.Index
