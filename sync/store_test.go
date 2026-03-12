@@ -83,28 +83,30 @@ func TestTaskStorage(t *testing.T) {
 		deadline := now.Add(48 * time.Hour)
 		completion := now.Add(time.Hour)
 		modification := now.Add(30 * time.Minute)
+		todayIndexRef := now.Add(2 * time.Hour)
 		alarmOffset := 3600
 
 		task := &things.Task{
-			UUID:             "task-full",
-			Title:            "Full Task",
-			Note:             "Detailed notes here",
-			Status:           things.TaskStatusCompleted,
-			Schedule:         things.TaskScheduleSomeday,
-			Type:             things.TaskTypeProject,
-			CreationDate:     now,
-			ModificationDate: &modification,
-			ScheduledDate:    &scheduled,
-			DeadlineDate:     &deadline,
-			CompletionDate:   &completion,
-			Index:            5,
-			TodayIndex:       3,
-			InTrash:          true,
-			AreaIDs:          []string{"area-1"},
-			ParentTaskIDs:    []string{"project-1"},
-			ActionGroupIDs:   []string{"heading-1"},
-			AlarmTimeOffset:  &alarmOffset,
-			TagIDs:           []string{"tag-a", "tag-b", "tag-c"},
+			UUID:                "task-full",
+			Title:               "Full Task",
+			Note:                "Detailed notes here",
+			Status:              things.TaskStatusCompleted,
+			Schedule:            things.TaskScheduleSomeday,
+			Type:                things.TaskTypeProject,
+			CreationDate:        now,
+			ModificationDate:    &modification,
+			ScheduledDate:       &scheduled,
+			DeadlineDate:        &deadline,
+			CompletionDate:      &completion,
+			TodayIndexReference: &todayIndexRef,
+			Index:               5,
+			TodayIndex:          3,
+			InTrash:             true,
+			AreaIDs:             []string{"area-1"},
+			ParentTaskIDs:       []string{"project-1"},
+			ActionGroupIDs:      []string{"heading-1"},
+			AlarmTimeOffset:     &alarmOffset,
+			TagIDs:              []string{"tag-a", "tag-b", "tag-c"},
 		}
 
 		if err := syncer.saveTask(task); err != nil {
@@ -166,6 +168,9 @@ func TestTaskStorage(t *testing.T) {
 		}
 		if retrieved.ModificationDate == nil || retrieved.ModificationDate.Unix() != modification.Unix() {
 			t.Errorf("ModificationDate mismatch")
+		}
+		if retrieved.TodayIndexReference == nil || retrieved.TodayIndexReference.Unix() != todayIndexRef.Unix() {
+			t.Errorf("TodayIndexReference mismatch: got %v", retrieved.TodayIndexReference)
 		}
 	})
 

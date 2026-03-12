@@ -193,13 +193,13 @@ type Task struct {
 	AreaIDs          []string
 	ParentTaskIDs    []string
 	ActionGroupIDs   []string
-	InTrash         bool
-	Schedule        TaskSchedule
-	Type            TaskType
+	InTrash             bool
+	Schedule            TaskSchedule
+	Type                TaskType
 	TodayIndex          int
 	TodayIndexReference *time.Time // tir: when set to today, task appears in Today view
 	DueOrder            int
-	AlarmTimeOffset *int
+	AlarmTimeOffset     *int
 	TagIDs          []string
 	RecurrenceIDs   []string
 	DelegateIDs     []string

@@ -139,7 +139,8 @@ func taskLocation(t *things.Task) TaskLocation {
 	case things.TaskScheduleInbox:
 		return LocationInbox
 	case things.TaskScheduleAnytime:
-		if t.ScheduledDate != nil && isToday(t.ScheduledDate) {
+		if (t.ScheduledDate != nil && isToday(t.ScheduledDate)) ||
+			(t.TodayIndexReference != nil && isToday(t.TodayIndexReference)) {
 			return LocationToday
 		}
 		return LocationAnytime

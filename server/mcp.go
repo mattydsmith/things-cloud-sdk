@@ -20,18 +20,18 @@ import (
 // ---------------------------------------------------------------------------
 
 type taskOutput struct {
-	UUID         string   `json:"uuid"`
-	Title        string   `json:"title"`
-	Note         string   `json:"note,omitempty"`
-	Status       string   `json:"status"`
-	Type         string   `json:"type"`
-	CompletedAt  string   `json:"completed_at,omitempty"`
-	Deadline     string   `json:"deadline,omitempty"`
-	ScheduledFor     string   `json:"scheduled_for,omitempty"`
-	TodayIndexRef    string   `json:"today_index_ref,omitempty"`
-	ProjectID        string   `json:"project_id,omitempty"`
-	AreaID       string   `json:"area_id,omitempty"`
-	Tags         []string `json:"tags,omitempty"`
+	UUID          string   `json:"uuid"`
+	Title         string   `json:"title"`
+	Note          string   `json:"note,omitempty"`
+	Status        string   `json:"status"`
+	Type          string   `json:"type"`
+	CompletedAt   string   `json:"completed_at,omitempty"`
+	Deadline      string   `json:"deadline,omitempty"`
+	ScheduledFor  string   `json:"scheduled_for,omitempty"`
+	TodayIndexRef string   `json:"today_index_ref,omitempty"`
+	ProjectID     string   `json:"project_id,omitempty"`
+	AreaID        string   `json:"area_id,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
 }
 
 type areaOutput struct {
