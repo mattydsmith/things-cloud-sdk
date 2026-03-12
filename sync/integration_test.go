@@ -90,6 +90,66 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("process task with tir stores TodayIndexReference separately", func(t *testing.T) {
+		payload := things.TaskActionItemPayload{}
+		title := "TIR test task"
+		payload.Title = &title
+		tp := things.TaskTypeTask
+		payload.Type = &tp
+		sched := things.TaskScheduleAnytime
+		payload.Schedule = &sched
+		srDate := things.Timestamp(time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC))
+		payload.ScheduledDate = &srDate
+
+		payloadBytes, _ := json.Marshal(payload)
+		item := things.Item{
+			UUID:   "task-tir",
+			Kind:   things.ItemKindTask,
+			Action: things.ItemActionCreated,
+			P:      payloadBytes,
+		}
+
+		if _, err := syncer.processItems([]things.Item{item}, 10); err != nil {
+			t.Fatalf("processItems (create) failed: %v", err)
+		}
+
+		modPayload := things.TaskActionItemPayload{}
+		tirDate := things.Timestamp(time.Date(2026, 3, 12, 0, 0, 0, 0, time.UTC))
+		modPayload.TaskIR = &tirDate
+
+		modBytes, _ := json.Marshal(modPayload)
+		modItem := things.Item{
+			UUID:   "task-tir",
+			Kind:   things.ItemKindTask,
+			Action: things.ItemActionModified,
+			P:      modBytes,
+		}
+
+		if _, err := syncer.processItems([]things.Item{modItem}, 11); err != nil {
+			t.Fatalf("processItems (modify tir) failed: %v", err)
+		}
+
+		task, err := syncer.State().Task("task-tir")
+		if err != nil {
+			t.Fatalf("Task lookup failed: %v", err)
+		}
+		if task == nil {
+			t.Fatal("task not found")
+		}
+		if task.ScheduledDate == nil {
+			t.Fatal("ScheduledDate should still be set")
+		}
+		if task.ScheduledDate.Day() != 10 {
+			t.Errorf("ScheduledDate should be March 10, got %v", task.ScheduledDate)
+		}
+		if task.TodayIndexReference == nil {
+			t.Fatal("TodayIndexReference should be set")
+		}
+		if task.TodayIndexReference.Day() != 12 {
+			t.Errorf("TodayIndexReference should be March 12, got %v", task.TodayIndexReference)
+		}
+	})
+
 	t.Run("process area creation", func(t *testing.T) {
 		payload := things.AreaActionItemPayload{}
 		title := "Work"
@@ -126,14 +186,15 @@ func TestIntegration(t *testing.T) {
 
 	t.Run("query change log", func(t *testing.T) {
 		// ChangesSinceIndex(0) returns changes with server_index > 0
-		// So we should get 2 changes (indexes 1 and 2)
+		// The test above adds two more task changes at indexes 10 and 11,
+		// so this should include indexes 1, 2, 10, and 11.
 		changes, err := syncer.ChangesSinceIndex(0)
 		if err != nil {
 			t.Fatalf("ChangesSinceIndex failed: %v", err)
 		}
 
-		if len(changes) != 2 {
-			t.Errorf("expected 2 changes (indexes 1 and 2), got %d", len(changes))
+		if len(changes) != 4 {
+			t.Errorf("expected 4 changes after index 0, got %d", len(changes))
 		}
 
 		// Test ChangesSinceIndex(-1) to get all changes
@@ -142,10 +203,113 @@ func TestIntegration(t *testing.T) {
 			t.Fatalf("ChangesSinceIndex failed: %v", err)
 		}
 
-		if len(allChanges) != 3 {
-			t.Errorf("expected 3 total changes, got %d", len(allChanges))
+		if len(allChanges) != 5 {
+			t.Errorf("expected 5 total changes, got %d", len(allChanges))
 		}
 	})
+}
+
+func TestTasksInTodayWithTIR(t *testing.T) {
+	t.Parallel()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+
+	syncer, err := Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer syncer.Close()
+
+	nowUTC := time.Now().UTC()
+	today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 12, 0, 0, 0, time.UTC)
+	yesterday := today.Add(-24 * time.Hour)
+
+	syncer.saveTask(&things.Task{
+		UUID:          "sr-only",
+		Title:         "SR Only Today",
+		Status:        things.TaskStatusPending,
+		Schedule:      things.TaskScheduleAnytime,
+		ScheduledDate: &today,
+	})
+	syncer.saveTask(&things.Task{
+		UUID:                "tir-only",
+		Title:               "TIR Only Today",
+		Status:              things.TaskStatusPending,
+		Schedule:            things.TaskScheduleAnytime,
+		TodayIndexReference: &today,
+	})
+	syncer.saveTask(&things.Task{
+		UUID:                "both-today",
+		Title:               "Both Today",
+		Status:              things.TaskStatusPending,
+		Schedule:            things.TaskScheduleAnytime,
+		ScheduledDate:       &today,
+		TodayIndexReference: &today,
+	})
+	syncer.saveTask(&things.Task{
+		UUID:                "sr-old-tir-today",
+		Title:               "SR Old TIR Today",
+		Status:              things.TaskStatusPending,
+		Schedule:            things.TaskScheduleAnytime,
+		ScheduledDate:       &yesterday,
+		TodayIndexReference: &today,
+	})
+	syncer.saveTask(&things.Task{
+		UUID:                "sr-today-tir-old",
+		Title:               "SR Today TIR Old",
+		Status:              things.TaskStatusPending,
+		Schedule:            things.TaskScheduleAnytime,
+		ScheduledDate:       &today,
+		TodayIndexReference: &yesterday,
+	})
+	syncer.saveTask(&things.Task{
+		UUID:                "both-old",
+		Title:               "Both Old",
+		Status:              things.TaskStatusPending,
+		Schedule:            things.TaskScheduleAnytime,
+		ScheduledDate:       &yesterday,
+		TodayIndexReference: &yesterday,
+	})
+	syncer.saveTask(&things.Task{
+		UUID:     "no-dates",
+		Title:    "No Dates",
+		Status:   things.TaskStatusPending,
+		Schedule: things.TaskScheduleAnytime,
+	})
+	syncer.saveTask(&things.Task{
+		UUID:                "inbox-with-tir",
+		Title:               "Inbox TIR",
+		Status:              things.TaskStatusPending,
+		Schedule:            things.TaskScheduleInbox,
+		TodayIndexReference: &today,
+	})
+
+	tasks, err := syncer.State().TasksInToday(QueryOpts{})
+	if err != nil {
+		t.Fatalf("TasksInToday failed: %v", err)
+	}
+
+	got := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
+		got[task.UUID] = true
+	}
+
+	expected := []string{"sr-only", "tir-only", "both-today", "sr-old-tir-today", "sr-today-tir-old"}
+	for _, uuid := range expected {
+		if !got[uuid] {
+			t.Errorf("expected task %q in Today, but not found", uuid)
+		}
+	}
+
+	notExpected := []string{"both-old", "no-dates", "inbox-with-tir"}
+	for _, uuid := range notExpected {
+		if got[uuid] {
+			t.Errorf("task %q should NOT be in Today", uuid)
+		}
+	}
+
+	if len(tasks) != len(expected) {
+		t.Errorf("expected %d tasks in Today, got %d", len(expected), len(tasks))
+	}
 }
 
 func TestStateQueries(t *testing.T) {
