@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go vet:*)",
+      "Bash(go test:*)",
+      "Bash(git -C /Users/mattsmith/Documents/Dev/things-cloud-sdk/.claude/worktrees/infallible-banzai status)",
+      "Bash(git -C /Users/mattsmith/Documents/Dev/things-cloud-sdk/.claude/worktrees/infallible-banzai log --oneline -5)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git -C /Users/mattsmith/Documents/Dev/things-cloud-sdk/.claude/worktrees/infallible-banzai push -u origin claude/infallible-banzai)",
+      "Bash(git -C /Users/mattsmith/Documents/Dev/things-cloud-sdk/.claude/worktrees/infallible-banzai diff --stat)"
+    ]
+  }
+}
