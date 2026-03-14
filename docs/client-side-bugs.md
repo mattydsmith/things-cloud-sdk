@@ -2,7 +2,9 @@
 
 ## Context
 
-After updating the SDK and building `things-cli`, tasks created by the CLI caused the Things macOS app to crash or behave erratically upon sync. The root causes were identified by comparing `things-cli` output against a Proxyman HAR capture of the real Things 3.15 client (`assets/Things_02-10-2026-10-01-09.har`).
+After updating the SDK and building `things-cli`, tasks created by the CLI caused the Things macOS app to crash or behave erratically upon sync. The root causes were identified by comparing `things-cli` output against Proxyman HAR captures from the real Things 3.15 client.
+
+The original `.har` files used during the investigation were local artifacts and are not currently checked into this repo. The representative payloads and conclusions are preserved inline below.
 
 ## Bug 1: Schedule Field (`st`) Values Were Swapped (CRITICAL)
 
@@ -58,7 +60,7 @@ case "inbox":
 
 ### Also affected: `listTasks` today filter
 
-The `things-cli today` command filtered tasks by `task.Schedule != 2`, which matched "someday" tasks, not "today" tasks. Fixed to check `task.Schedule == 1` AND `task.ScheduledDate == today`.
+The original `things-cli today` command filtered tasks by `task.Schedule != 2`, which matched "not someday" rather than "today". The first CLI fix changed this to an explicit Today check instead of `!= 2`. Later follow-up work in the sync engine clarified the canonical Today definition as `schedule=1 && (sr==today || tir==today)`, because `tir` is also a real Today signal.
 
 ## Bug 2: SDK `TaskSchedule` Constants Were Misleading
 
@@ -237,7 +239,7 @@ if v, ok := opts["project"]; ok && v != "" {
 // Same pattern for --heading and --area
 ```
 
-This follows the same principle as the heading fix (Bug 5): structural elements inside projects and areas are never "inbox" items.
+This follows the same principle as the schedule-state fixes above: structural elements inside projects and areas are never "inbox" items.
 
 ## Bug 7: Incremental Sync Returns 500 Errors (2026-02-11)
 
@@ -265,22 +267,26 @@ During parsing, these nested maps get *expanded* — a single server item with m
 
 **Example**: Request `start-index=177` returns 24 server items that expand to 32 entities, with `current-item-index=201`.
 - Wrong: `177 + 32 = 209` → server returns 500 (209 > 201)
-- Right: use server's `current-item-index` directly → 201
+- Right: advance by the 24 outer server items → `177 + 24 = 201`
 
 ### The Fix
 
-Two changes to `sync/sync.go`:
+Two changes ultimately landed:
 
 1. **Pre-check**: Call `GET /history/{id}` to get `latest-server-index` before fetching items. Skip if stored cursor >= server index (nothing new to fetch).
 
-2. **Pagination**: Use `s.history.LatestServerIndex` (populated from response's `current-item-index`) instead of calculating `startIndex + len(items)`.
+2. **Pagination**: Keep two different cursors straight:
+   - `items.go` sets `LoadedServerIndex = opts.StartIndex + len(v.Items)`, where `len(v.Items)` is the count of outer server items, not expanded entities.
+   - `sync.Sync()` advances with `s.history.LoadedServerIndex`.
+   - `LatestServerIndex` still tracks the server head (`current-item-index`) and is used for "caught up?" checks and persisted sync state, not for page-to-page advancement.
 
 ```go
 // Before (wrong):
 startIndex = startIndex + len(items)  // items is expanded count
 
 // After (correct):
-startIndex = s.history.LatestServerIndex  // server's actual index
+h.LoadedServerIndex = opts.StartIndex + len(v.Items)
+startIndex = s.history.LoadedServerIndex
 ```
 
 ### Additional Discovery
@@ -307,7 +313,7 @@ The edit path was incomplete compared to the create path. When creating a task w
 
 ### Evidence
 
-HAR capture (`assets/task_inbox-to-project.har`) shows Things.app sends both fields when moving a task from Inbox to a project:
+The original HAR capture for an Inbox -> project move showed that Things.app sends both fields when moving a task from Inbox to a project:
 
 ```json
 {"pr":["BVU8qZ9dNjrdxLvDHPvfDS"],"st":1,"ix":4712,"md":...}
@@ -321,7 +327,7 @@ Updated `cmdEdit()` to set `st=1` (Anytime) when `--project`, `--area`, or `--he
 if v, ok := opts["area"]; ok && v != "" {
     u.Area(v)
     if _, hasWhen := opts["when"]; !hasWhen {
-        u.Schedule(1, 0, 0) // Anytime
+        u.Schedule(1, nil, nil) // Anytime
     }
 }
 // Same pattern for --project and --heading
@@ -331,6 +337,24 @@ if v, ok := opts["area"]; ok && v != "" {
 
 Tasks moved from Inbox to project/area/heading via `things-cli edit` now correctly appear under their parent instead of remaining in Inbox.
 
+## Later Follow-Up: `tir` Is a Separate Today Signal (2026-03-12)
+
+This was not the original crash root cause, but it became an important correctness follow-up once the persistent sync engine and MCP read layer were in use.
+
+### The Problem
+
+Early sync/state code treated `tir` as if it were interchangeable with `sr`, or ignored it when determining whether a task belonged in Today or Upcoming. That produced mismatches where Things.app showed a task in Today but SDK/MCP queries did not.
+
+### The Fix
+
+- `tir` is now stored separately as `TodayIndexReference` / `today_index_ref` instead of overwriting `ScheduledDate`.
+- Today detection now treats `schedule=1` with either `sr` or `tir` on today's UTC date as Today.
+- Upcoming detection now also considers future `tir` values for deferred tasks.
+
+### Why It Matters
+
+The original crash investigation established that `sr` and `tir` both participate in Things' schedule/view semantics. The later sync fixes made the code match that model instead of collapsing both fields into a single date.
+
 ## Files Changed
 
 | File | Changes |
@@ -338,12 +362,18 @@ Tasks moved from Inbox to project/area/heading via `things-cli edit` now correct
 | `cmd/things-cli/main.go` | Fixed `st` values, fixed `generateUUID()` to use Base58, added `create-area` command, auto-set `st=1` for --project/--heading/--area (create and edit - Bug 8), added `batch` command for multiple ops in one HTTP request |
 | `syncutil/syncutil.go` | New package with shared utilities for sync-based CLI tools |
 | `example/main.go` | Base58 UUID encoding, removed `ModificationDate` from creates |
-| `types.go` | Renamed `TaskScheduleToday` → `TaskScheduleInbox`, fixed `Timestamp` marshal/unmarshal |
+| `types.go` | Renamed `TaskScheduleToday` → `TaskScheduleInbox`, fixed `Timestamp` marshal/unmarshal, added separate `TodayIndexReference` tracking for `tir` |
 | `types_test.go` | Updated marshal test for fractional output |
 | `itemaction_string.go` | Updated stringer for renamed constant |
 | `state/memory/memory.go` | Nil guard in `hasArea()` |
 | `notes.go` | Bounds clamping in `ApplyPatches()` |
 | `notes_test.go` | Regression tests for edge cases |
 | `state/memory/memory_test.go` | Regression tests for tombstone and orphan cases |
-| `sync/sync.go` | Pre-check server index, fix pagination to use server's `current-item-index`, added `getServerIndex()` |
+| `items.go` | Track `LoadedServerIndex` relative to the requested `start-index` so pagination advances by outer server items, not expanded entities |
+| `sync/process.go` | Preserve `sr` and `tir` separately when applying task payloads |
+| `sync/schema.go` | Added `today_index_ref` persistence for `tir` |
+| `sync/state.go` | Today queries now check `scheduled_date` or `today_index_ref`, using UTC day boundaries |
+| `sync/detect.go` | Today/Upcoming change detection now considers `tir` as well as `sr` |
+| `sync/sync.go` | Pre-check server index, advance pagination with `LoadedServerIndex`, added `getServerIndex()` |
+| `server/mcp.go` | Expose `today_index_ref` in MCP output and surface pre-read sync failures |
 | `histories.go` | Added `HistoryWithID()` helper for cached history ID |
