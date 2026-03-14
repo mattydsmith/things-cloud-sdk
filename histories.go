@@ -53,7 +53,9 @@ func (h *History) Sync() error {
 		return err
 	}
 	var v itemsResponse
-	json.Unmarshal(bs, &v)
+	if err := json.Unmarshal(bs, &v); err != nil {
+		return err
+	}
 	h.LatestServerIndex = v.CurrentItemIndex
 	h.LatestSchemaVersion = v.SchemaVersion
 	h.LatestTotalContentSize = v.LatestTotalContentSize
@@ -172,7 +174,9 @@ func (c *Client) Histories() ([]*History, error) {
 		return nil, err
 	}
 	var keys []string
-	json.Unmarshal(bs, &keys)
+	if err := json.Unmarshal(bs, &keys); err != nil {
+		return nil, err
+	}
 
 	var histories = make([]*History, len(keys))
 	for i, key := range keys {
@@ -212,7 +216,9 @@ func (c *Client) CreateHistory() (*History, error) {
 		return nil, err
 	}
 	var v createHistoryResponse
-	json.Unmarshal(bs, &v)
+	if err := json.Unmarshal(bs, &v); err != nil {
+		return nil, err
+	}
 	return &History{
 		Client: c,
 		ID:     v.Key,
@@ -258,6 +264,9 @@ func (h *History) Write(items ...Identifiable) error {
 		return err
 	}
 	req, err := http.NewRequest("POST", fmt.Sprintf("/version/1/history/%s/commit", h.ID), bytes.NewReader(bs))
+	if err != nil {
+		return err
+	}
 	req.Header.Add("Schema", "301")
 	req.Header.Add("Push-Priority", "5")
 	// Full App-Instance-Id matching Things format: {hash}-{bundleId}-{hash}
@@ -270,9 +279,6 @@ func (h *History) Write(items ...Identifiable) error {
 	query.Add("ancestor-index", strconv.Itoa(h.LatestServerIndex))
 	query.Add("_cnt", "1")
 	req.URL.RawQuery = query.Encode()
-	if err != nil {
-		return err
-	}
 	resp, err := h.Client.do(req)
 	if err != nil {
 		return err
@@ -288,7 +294,9 @@ func (h *History) Write(items ...Identifiable) error {
 		return err
 	}
 	var w commitResponse
-	json.Unmarshal(rs, &w)
+	if err := json.Unmarshal(rs, &w); err != nil {
+		return err
+	}
 	h.LatestServerIndex = w.ServerHeadIndex
 	return nil
 }

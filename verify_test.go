@@ -21,6 +21,17 @@ func TestClient_Verify(t *testing.T) {
 		}
 	})
 
+	t.Run("InvalidJSON", func(t *testing.T) {
+		t.Parallel()
+		server := fakeBodyServer(200, "{")
+		defer server.Close()
+
+		c := New(fmt.Sprintf("http://%s", server.Listener.Addr().String()), "martin@example.com", "")
+		if _, err := c.Verify(); err == nil {
+			t.Fatal("Expected malformed verify JSON to fail")
+		}
+	})
+
 	t.Run("Error", func(t *testing.T) {
 		t.Parallel()
 		server := fakeServer(fakeResponse{401, "error.json"})
@@ -30,6 +41,14 @@ func TestClient_Verify(t *testing.T) {
 		_, err := c.Verify()
 		if err == nil {
 			t.Error("Expected Verification to fail, but didn't")
+		}
+	})
+
+	t.Run("InvalidRequest", func(t *testing.T) {
+		t.Parallel()
+		c := New("http://example.com", "bad\nemail", "")
+		if _, err := c.Verify(); err == nil {
+			t.Fatal("Expected invalid account email to return an error")
 		}
 	})
 }

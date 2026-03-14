@@ -40,6 +40,14 @@ func fakeServer(t fakeResponse) *httptest.Server {
 	}))
 }
 
+func fakeBodyServer(statusCode int, body string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		fmt.Fprint(w, body)
+	}))
+}
+
 func TestClient_UserAgent(t *testing.T) {
 	var capturedHeaders http.Header
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
