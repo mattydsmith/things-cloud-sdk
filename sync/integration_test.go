@@ -91,6 +91,10 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("process task with tir stores TodayIndexReference separately", func(t *testing.T) {
+		now := time.Now()
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		yesterday := today.Add(-24 * time.Hour)
+
 		payload := things.TaskActionItemPayload{}
 		title := "TIR test task"
 		payload.Title = &title
@@ -98,7 +102,7 @@ func TestIntegration(t *testing.T) {
 		payload.Type = &tp
 		sched := things.TaskScheduleAnytime
 		payload.Schedule = &sched
-		srDate := things.Timestamp(time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC))
+		srDate := things.Timestamp(yesterday)
 		payload.ScheduledDate = &srDate
 
 		payloadBytes, _ := json.Marshal(payload)
@@ -114,7 +118,7 @@ func TestIntegration(t *testing.T) {
 		}
 
 		modPayload := things.TaskActionItemPayload{}
-		tirDate := things.Timestamp(time.Date(2026, 3, 12, 0, 0, 0, 0, time.UTC))
+		tirDate := things.Timestamp(today)
 		modPayload.TaskIR = &tirDate
 
 		modBytes, _ := json.Marshal(modPayload)
@@ -139,14 +143,14 @@ func TestIntegration(t *testing.T) {
 		if task.ScheduledDate == nil {
 			t.Fatal("ScheduledDate should still be set")
 		}
-		if task.ScheduledDate.Day() != 10 {
-			t.Errorf("ScheduledDate should be March 10, got %v", task.ScheduledDate)
+		if task.ScheduledDate.Unix() != yesterday.Unix() {
+			t.Errorf("ScheduledDate should remain %v, got %v", yesterday, task.ScheduledDate)
 		}
 		if task.TodayIndexReference == nil {
 			t.Fatal("TodayIndexReference should be set")
 		}
-		if task.TodayIndexReference.Day() != 12 {
-			t.Errorf("TodayIndexReference should be March 12, got %v", task.TodayIndexReference)
+		if task.TodayIndexReference.Unix() != today.Unix() {
+			t.Errorf("TodayIndexReference should be %v, got %v", today, task.TodayIndexReference)
 		}
 	})
 
