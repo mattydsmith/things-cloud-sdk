@@ -413,6 +413,11 @@ func applyTaskPayload(old *things.Task, uuid string, p things.TaskActionItemPayl
 			t.TodayIndexReference = p.TaskIR.Time()
 		}
 	}
+	if (p.HasScheduledDate() || p.Schedule != nil) && !p.HasTaskIR() {
+		// A reschedule without tir means the task no longer carries an
+		// explicit Today placement from the previous state.
+		t.TodayIndexReference = nil
+	}
 	if p.HasCompletionDate() {
 		t.CompletionDate = nil
 		if p.CompletionDate != nil {

@@ -743,3 +743,119 @@ func TestProcessTaskClearsNullableDates(t *testing.T) {
 		t.Error("expected CompletionDate to be cleared")
 	}
 }
+
+func TestProcessTaskClearsStaleTodayIndexReference(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	syncer, err := Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer syncer.Close()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	today := now
+	future := now.Add(48 * time.Hour)
+
+	t.Run("scheduled date update without tir clears stale today reference", func(t *testing.T) {
+		taskUUID := "task-clear-stale-tir-sr"
+		if err := syncer.saveTask(&things.Task{
+			UUID:                taskUUID,
+			Title:               "Task",
+			Schedule:            things.TaskScheduleAnytime,
+			Type:                things.TaskTypeTask,
+			Status:              things.TaskStatusPending,
+			CreationDate:        now,
+			TodayIndexReference: &today,
+		}); err != nil {
+			t.Fatalf("saveTask failed: %v", err)
+		}
+
+		futureTS := things.Timestamp(future)
+		payload := things.TaskActionItemPayload{ScheduledDate: &futureTS}
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("Marshal failed: %v", err)
+		}
+
+		item := things.Item{
+			UUID:   taskUUID,
+			Kind:   things.ItemKindTask,
+			Action: things.ItemActionModified,
+			P:      payloadBytes,
+		}
+
+		if _, err := syncer.processItems([]things.Item{item}, 1); err != nil {
+			t.Fatalf("processItems failed: %v", err)
+		}
+
+		task, err := syncer.State().Task(taskUUID)
+		if err != nil {
+			t.Fatalf("Task lookup failed: %v", err)
+		}
+		if task == nil {
+			t.Fatal("task not found")
+		}
+		if task.TodayIndexReference != nil {
+			t.Fatal("expected TodayIndexReference to be cleared")
+		}
+
+		todayTasks, err := syncer.State().TasksInToday(QueryOpts{})
+		if err != nil {
+			t.Fatalf("TasksInToday failed: %v", err)
+		}
+		for _, todayTask := range todayTasks {
+			if todayTask.UUID == taskUUID {
+				t.Fatal("task should not remain in Today after sr-only reschedule")
+			}
+		}
+	})
+
+	t.Run("schedule update without tir clears stale today reference", func(t *testing.T) {
+		taskUUID := "task-clear-stale-tir-schedule"
+		if err := syncer.saveTask(&things.Task{
+			UUID:                taskUUID,
+			Title:               "Task",
+			Schedule:            things.TaskScheduleSomeday,
+			Type:                things.TaskTypeTask,
+			Status:              things.TaskStatusPending,
+			CreationDate:        now,
+			TodayIndexReference: &today,
+		}); err != nil {
+			t.Fatalf("saveTask failed: %v", err)
+		}
+
+		schedule := things.TaskScheduleAnytime
+		payload := things.TaskActionItemPayload{Schedule: &schedule}
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("Marshal failed: %v", err)
+		}
+
+		item := things.Item{
+			UUID:   taskUUID,
+			Kind:   things.ItemKindTask,
+			Action: things.ItemActionModified,
+			P:      payloadBytes,
+		}
+
+		if _, err := syncer.processItems([]things.Item{item}, 2); err != nil {
+			t.Fatalf("processItems failed: %v", err)
+		}
+
+		task, err := syncer.State().Task(taskUUID)
+		if err != nil {
+			t.Fatalf("Task lookup failed: %v", err)
+		}
+		if task == nil {
+			t.Fatal("task not found")
+		}
+		if task.TodayIndexReference != nil {
+			t.Fatal("expected TodayIndexReference to be cleared")
+		}
+		if got := taskLocation(task); got != LocationAnytime {
+			t.Fatalf("expected task location %v, got %v", LocationAnytime, got)
+		}
+	})
+}
