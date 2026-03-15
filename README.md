@@ -199,11 +199,11 @@ The underlying Go SDK can be used directly as a library. See **[docs/sdk.md](doc
 
 ## Testing
 
-112 integration tests across 5 test suites:
+113 integration tests across 5 test suites:
 
 ```bash
 ./tests/test-smoke.sh          # Core read/write workflow (11 checks)
-./tests/test-mcp.sh 010        # All MCP write tools (43 checks)
+./tests/test-mcp.sh 010        # All MCP write tools (44 checks)
 ./tests/test-mcp-read.sh       # All MCP read tools (29 checks)
 ./tests/test-mcp-protocol.sh   # JSON-RPC handshake and error handling (11 checks)
 API_KEY=your-key ./tests/test-api.sh  # All REST endpoints (18 checks)
