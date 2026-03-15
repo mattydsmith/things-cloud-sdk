@@ -292,7 +292,13 @@ func main() {
 		var body struct {
 			Key string `json:"key"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err == nil && body.Key != "" {
+		ok, err := decodeOptionalJSONBody(w, r, &body)
+		if err != nil {
+			if isRequestBodyTooLarge(err) {
+				jsonError(w, errRequestBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
+				return
+			}
+		} else if ok && body.Key != "" {
 			keyToDelete = body.Key
 		}
 		h := client.HistoryWithID(keyToDelete)
@@ -347,7 +353,15 @@ func main() {
 		var body struct {
 			Code string `json:"code"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Code == "" {
+		if err := decodeJSONBody(w, r, &body); err != nil {
+			if isRequestBodyTooLarge(err) {
+				jsonError(w, errRequestBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
+				return
+			}
+			jsonError(w, "JSON body with 'code' required", 400)
+			return
+		}
+		if body.Code == "" {
 			jsonError(w, "JSON body with 'code' required", 400)
 			return
 		}

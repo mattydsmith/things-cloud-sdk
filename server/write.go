@@ -1086,8 +1086,8 @@ func handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req CreateTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid JSON: "+err.Error(), 400)
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSONDecodeError(w, "invalid JSON: ", err)
 		return
 	}
 	if req.Title == "" {
@@ -1112,8 +1112,8 @@ func handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req UUIDRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid JSON: "+err.Error(), 400)
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSONDecodeError(w, "invalid JSON: ", err)
 		return
 	}
 	if req.UUID == "" {
@@ -1137,8 +1137,8 @@ func handleTrashTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req UUIDRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid JSON: "+err.Error(), 400)
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSONDecodeError(w, "invalid JSON: ", err)
 		return
 	}
 	if req.UUID == "" {
@@ -1162,8 +1162,8 @@ func handleEditTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req EditTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid JSON: "+err.Error(), 400)
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSONDecodeError(w, "invalid JSON: ", err)
 		return
 	}
 	if req.UUID == "" {
