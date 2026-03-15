@@ -302,7 +302,7 @@ func (h *History) Write(items ...Identifiable) error {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		bs, _ := httputil.DumpResponse(resp, true)
-		log.Println(string(bs))
+		log.Println(formatDebugLogBody(bs))
 		return &HTTPStatusError{
 			StatusCode: resp.StatusCode,
 			Status:     resp.Status,

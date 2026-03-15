@@ -5,6 +5,8 @@ import "time"
 // FrequencyUnit describes recurring frequencies
 type FrequencyUnit int64
 
+const NeverendingRepeatYear = 4001
+
 var (
 	// FrequencyUnitDaily occurs every n days
 	FrequencyUnitDaily FrequencyUnit = 16
@@ -40,7 +42,7 @@ type RepeaterConfiguration struct {
 
 // IsNeverending determines if a recurring rule has a specific end
 func (c RepeaterConfiguration) IsNeverending() bool {
-	return c.LastScheduledAt != nil && c.LastScheduledAt.Time().Year() == 4001
+	return c.LastScheduledAt != nil && c.LastScheduledAt.Time().Year() == NeverendingRepeatYear
 }
 
 func (c RepeaterConfiguration) firstScheduledTime() (time.Time, bool) {

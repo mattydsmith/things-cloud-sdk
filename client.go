@@ -126,14 +126,14 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 
 	if c.Debug {
 		bs, _ := httputil.DumpRequest(req, true)
-		log.Println("REQUEST:", string(bs))
+		log.Println("REQUEST:", formatDebugLogBody(bs))
 	}
 
 	resp, err := c.client.Do(req)
 	if c.Debug {
 		if err == nil {
 			bs, _ := httputil.DumpResponse(resp, true)
-			log.Println("RESPONSE:", string(bs))
+			log.Println("RESPONSE:", formatDebugLogBody(bs))
 		}
 		log.Println()
 	}

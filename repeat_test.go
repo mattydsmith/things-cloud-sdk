@@ -68,9 +68,8 @@ func TestRepeaterConfiguration_NewFields(t *testing.T) {
 }
 
 func TestRepeaterConfiguration_IsNeverending(t *testing.T) {
-	ts := &Timestamp{}
-	ts.UnmarshalJSON([]byte(`64092211200`))
-	rc := RepeaterConfiguration{LastScheduledAt: ts}
+	ts := Timestamp(time.Date(NeverendingRepeatYear, time.January, 1, 0, 0, 0, 0, time.UTC))
+	rc := RepeaterConfiguration{LastScheduledAt: &ts}
 
 	if !rc.IsNeverending() {
 		t.Fatal("Expect repeater to be never ending, but isn't")

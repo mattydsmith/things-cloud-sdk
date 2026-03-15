@@ -433,7 +433,7 @@ func buildRepeatRule(repeat string, refDate time.Time) (*json.RawMessage, error)
 
 	ref := time.Date(refDate.Year(), refDate.Month(), refDate.Day(), 0, 0, 0, 0, time.UTC)
 	srTs := ref.Unix()
-	edTs := int64(64092211200) // year 4001 = neverending
+	edTs := time.Date(thingscloud.NeverendingRepeatYear, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
 	if endTs != nil {
 		if *endTs < srTs {
 			return nil, fmt.Errorf("repeat end date must be on or after start date")
