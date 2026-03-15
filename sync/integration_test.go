@@ -2,6 +2,7 @@ package sync
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -679,6 +680,71 @@ func TestStateQueries(t *testing.T) {
 		}
 		if allCompleted[0].UUID != "completed-1" || allCompleted[1].UUID != "completed-2" {
 			t.Fatalf("expected completed tasks ordered by completion date desc, got %s then %s", allCompleted[0].UUID, allCompleted[1].UUID)
+		}
+	})
+}
+
+func TestStateQueryPagination(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	syncer, err := Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer syncer.Close()
+
+	for i := 1; i <= 3; i++ {
+		if err := syncer.saveTask(&things.Task{
+			UUID:     fmt.Sprintf("task-%d", i),
+			Title:    fmt.Sprintf("Task %d", i),
+			Type:     things.TaskTypeTask,
+			Status:   things.TaskStatusPending,
+			Schedule: things.TaskScheduleAnytime,
+			Index:    i,
+		}); err != nil {
+			t.Fatalf("saveTask %d failed: %v", i, err)
+		}
+	}
+	if _, err := syncer.db.Exec(`INSERT INTO areas (uuid, title, "index") VALUES ('area-1', 'Area 1', 1), ('area-2', 'Area 2', 2), ('area-3', 'Area 3', 3)`); err != nil {
+		t.Fatalf("insert areas failed: %v", err)
+	}
+	if _, err := syncer.db.Exec(`INSERT INTO tags (uuid, title, shortcut, "index") VALUES ('tag-1', 'Tag 1', '', 1), ('tag-2', 'Tag 2', '', 2), ('tag-3', 'Tag 3', '', 3)`); err != nil {
+		t.Fatalf("insert tags failed: %v", err)
+	}
+
+	state := syncer.State()
+
+	t.Run("AllTasks paginates with limit and offset", func(t *testing.T) {
+		tasks, err := state.AllTasks(QueryOpts{Limit: 2, Offset: 1})
+		if err != nil {
+			t.Fatalf("AllTasks failed: %v", err)
+		}
+		if len(tasks) != 2 {
+			t.Fatalf("expected 2 tasks, got %d", len(tasks))
+		}
+		if tasks[0].UUID != "task-2" || tasks[1].UUID != "task-3" {
+			t.Fatalf("unexpected tasks: %s, %s", tasks[0].UUID, tasks[1].UUID)
+		}
+	})
+
+	t.Run("AllAreas paginates with limit and offset", func(t *testing.T) {
+		areas, err := state.AllAreasWithOpts(QueryOpts{Limit: 1, Offset: 1})
+		if err != nil {
+			t.Fatalf("AllAreasWithOpts failed: %v", err)
+		}
+		if len(areas) != 1 || areas[0].UUID != "area-2" {
+			t.Fatalf("unexpected areas: %#v", areas)
+		}
+	})
+
+	t.Run("AllTags paginates with offset only", func(t *testing.T) {
+		tags, err := state.AllTagsWithOpts(QueryOpts{Offset: 2})
+		if err != nil {
+			t.Fatalf("AllTagsWithOpts failed: %v", err)
+		}
+		if len(tags) != 1 || tags[0].UUID != "tag-3" {
+			t.Fatalf("unexpected tags: %#v", tags)
 		}
 	})
 }

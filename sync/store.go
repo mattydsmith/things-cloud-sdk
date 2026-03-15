@@ -409,3 +409,25 @@ func (s *Syncer) logChange(serverIndex int, change Change, payload string) error
 	`, serverIndex, time.Now().Unix(), change.ChangeType(), change.EntityType(), change.EntityUUID(), payload)
 	return err
 }
+
+// purgeDeleted permanently removes rows already marked deleted and any
+// dependent junction rows so the local cache does not grow forever.
+func (s *Syncer) purgeDeleted() error {
+	statements := []string{
+		`DELETE FROM task_tags WHERE task_uuid IN (SELECT uuid FROM tasks WHERE deleted = 1)`,
+		`DELETE FROM task_tags WHERE tag_uuid IN (SELECT uuid FROM tags WHERE deleted = 1)`,
+		`DELETE FROM area_tags WHERE area_uuid IN (SELECT uuid FROM areas WHERE deleted = 1)`,
+		`DELETE FROM area_tags WHERE tag_uuid IN (SELECT uuid FROM tags WHERE deleted = 1)`,
+		`DELETE FROM checklist_items WHERE deleted = 1 OR task_uuid IN (SELECT uuid FROM tasks WHERE deleted = 1)`,
+		`DELETE FROM tasks WHERE deleted = 1`,
+		`DELETE FROM areas WHERE deleted = 1`,
+		`DELETE FROM tags WHERE deleted = 1`,
+	}
+
+	for _, stmt := range statements {
+		if _, err := s.db.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}

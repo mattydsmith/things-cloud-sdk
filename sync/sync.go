@@ -143,6 +143,9 @@ func (s *Syncer) Sync() ([]Change, error) {
 
 	// If our cursor is already at or beyond the server's index, nothing to fetch
 	if startIndex >= serverIndex {
+		if err := s.purgeDeleted(); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 
@@ -188,6 +191,9 @@ func (s *Syncer) Sync() ([]Change, error) {
 
 	// Save sync state
 	if err := s.saveSyncState(s.history.ID, s.history.LatestServerIndex); err != nil {
+		return nil, err
+	}
+	if err := s.purgeDeleted(); err != nil {
 		return nil, err
 	}
 

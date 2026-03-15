@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -53,6 +54,27 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, resp)
 }
 
+func paginationQueryOpts(r *http.Request) (sync.QueryOpts, error) {
+	opts := sync.QueryOpts{}
+
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 0 {
+			return opts, fmt.Errorf("limit must be a non-negative integer")
+		}
+		opts.Limit = limit
+	}
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		offset, err := strconv.Atoi(raw)
+		if err != nil || offset < 0 {
+			return opts, fmt.Errorf("offset must be a non-negative integer")
+		}
+		opts.Offset = offset
+	}
+
+	return opts, nil
+}
+
 func handleSync(w http.ResponseWriter, r *http.Request) {
 	changes, err := syncer.Sync()
 	if err != nil {
@@ -65,12 +87,17 @@ func handleSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleInbox(w http.ResponseWriter, r *http.Request) {
+	opts, err := paginationQueryOpts(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err := syncForRead(); err != nil {
 		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
 		return
 	}
 	state := syncer.State()
-	tasks, err := state.TasksInInbox(sync.QueryOpts{})
+	tasks, err := state.TasksInInbox(opts)
 	if err != nil {
 		jsonError(w, fmt.Sprintf("failed to get inbox: %v", err), 500)
 		return
@@ -83,12 +110,17 @@ func handleInbox(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleToday(w http.ResponseWriter, r *http.Request) {
+	opts, err := paginationQueryOpts(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err := syncForRead(); err != nil {
 		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
 		return
 	}
 	state := syncer.State()
-	tasks, err := state.TasksInToday(sync.QueryOpts{})
+	tasks, err := state.TasksInToday(opts)
 	if err != nil {
 		jsonError(w, fmt.Sprintf("failed to get today: %v", err), 500)
 		return
@@ -101,12 +133,17 @@ func handleToday(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleProjects(w http.ResponseWriter, r *http.Request) {
+	opts, err := paginationQueryOpts(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err := syncForRead(); err != nil {
 		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
 		return
 	}
 	state := syncer.State()
-	projects, err := state.AllProjects(sync.QueryOpts{})
+	projects, err := state.AllProjects(opts)
 	if err != nil {
 		jsonError(w, fmt.Sprintf("failed to get projects: %v", err), 500)
 		return
@@ -119,12 +156,17 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAreas(w http.ResponseWriter, r *http.Request) {
+	opts, err := paginationQueryOpts(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err := syncForRead(); err != nil {
 		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
 		return
 	}
 	state := syncer.State()
-	areas, err := state.AllAreas()
+	areas, err := state.AllAreasWithOpts(opts)
 	if err != nil {
 		jsonError(w, fmt.Sprintf("failed to get areas: %v", err), 500)
 		return
@@ -137,12 +179,17 @@ func handleAreas(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTags(w http.ResponseWriter, r *http.Request) {
+	opts, err := paginationQueryOpts(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err := syncForRead(); err != nil {
 		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
 		return
 	}
 	state := syncer.State()
-	tags, err := state.AllTags()
+	tags, err := state.AllTagsWithOpts(opts)
 	if err != nil {
 		jsonError(w, fmt.Sprintf("failed to get tags: %v", err), 500)
 		return
