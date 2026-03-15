@@ -316,6 +316,181 @@ func TestTasksInTodayWithTIR(t *testing.T) {
 	}
 }
 
+func TestIntegration_TaskAssignmentChanges(t *testing.T) {
+	t.Parallel()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+
+	syncer, err := Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer syncer.Close()
+
+	t.Run("assigning to project and area emits container changes", func(t *testing.T) {
+		project := &things.Task{UUID: "project-1", Title: "Project", Type: things.TaskTypeProject}
+		if err := syncer.saveTask(project); err != nil {
+			t.Fatalf("saveTask(project) failed: %v", err)
+		}
+		area := &things.Area{UUID: "area-1", Title: "Work"}
+		if err := syncer.saveArea(area); err != nil {
+			t.Fatalf("saveArea failed: %v", err)
+		}
+		task := &things.Task{UUID: "task-assign", Title: "Task", Type: things.TaskTypeTask}
+		if err := syncer.saveTask(task); err != nil {
+			t.Fatalf("saveTask(task) failed: %v", err)
+		}
+
+		parentIDs := []string{"project-1"}
+		areaIDs := []string{"area-1"}
+		payload := things.TaskActionItemPayload{
+			ParentTaskIDs: &parentIDs,
+			AreaIDs:       &areaIDs,
+		}
+		payloadBytes, _ := json.Marshal(payload)
+		item := things.Item{
+			UUID:   "task-assign",
+			Kind:   things.ItemKindTask,
+			Action: things.ItemActionModified,
+			P:      payloadBytes,
+		}
+
+		changes, err := syncer.processItems([]things.Item{item}, 20)
+		if err != nil {
+			t.Fatalf("processItems failed: %v", err)
+		}
+
+		var gotProject, gotArea bool
+		for _, change := range changes {
+			switch c := change.(type) {
+			case TaskAssignedToProject:
+				gotProject = true
+				if c.Project == nil || c.Project.UUID != "project-1" {
+					t.Fatalf("expected new project assignment to project-1, got %#v", c.Project)
+				}
+				if c.OldProject != nil {
+					t.Fatalf("expected no old project, got %#v", c.OldProject)
+				}
+			case TaskAssignedToArea:
+				gotArea = true
+				if c.Area == nil || c.Area.UUID != "area-1" {
+					t.Fatalf("expected new area assignment to area-1, got %#v", c.Area)
+				}
+				if c.OldArea != nil {
+					t.Fatalf("expected no old area, got %#v", c.OldArea)
+				}
+			}
+		}
+
+		if !gotProject {
+			t.Fatal("expected TaskAssignedToProject change")
+		}
+		if !gotArea {
+			t.Fatal("expected TaskAssignedToArea change")
+		}
+	})
+
+	t.Run("clearing project and area emits removal changes", func(t *testing.T) {
+		project := &things.Task{UUID: "project-2", Title: "Project 2", Type: things.TaskTypeProject}
+		if err := syncer.saveTask(project); err != nil {
+			t.Fatalf("saveTask(project) failed: %v", err)
+		}
+		area := &things.Area{UUID: "area-2", Title: "Personal"}
+		if err := syncer.saveArea(area); err != nil {
+			t.Fatalf("saveArea failed: %v", err)
+		}
+		task := &things.Task{
+			UUID:          "task-clear",
+			Title:         "Task Clear",
+			Type:          things.TaskTypeTask,
+			ParentTaskIDs: []string{"project-2"},
+			AreaIDs:       []string{"area-2"},
+		}
+		if err := syncer.saveTask(task); err != nil {
+			t.Fatalf("saveTask(task) failed: %v", err)
+		}
+
+		parentIDs := []string{}
+		areaIDs := []string{}
+		payload := things.TaskActionItemPayload{
+			ParentTaskIDs: &parentIDs,
+			AreaIDs:       &areaIDs,
+		}
+		payloadBytes, _ := json.Marshal(payload)
+		item := things.Item{
+			UUID:   "task-clear",
+			Kind:   things.ItemKindTask,
+			Action: things.ItemActionModified,
+			P:      payloadBytes,
+		}
+
+		changes, err := syncer.processItems([]things.Item{item}, 21)
+		if err != nil {
+			t.Fatalf("processItems failed: %v", err)
+		}
+
+		var gotProject, gotArea bool
+		for _, change := range changes {
+			switch c := change.(type) {
+			case TaskAssignedToProject:
+				gotProject = true
+				if c.Project != nil {
+					t.Fatalf("expected project removal, got new project %#v", c.Project)
+				}
+				if c.OldProject == nil || c.OldProject.UUID != "project-2" {
+					t.Fatalf("expected old project project-2, got %#v", c.OldProject)
+				}
+			case TaskAssignedToArea:
+				gotArea = true
+				if c.Area != nil {
+					t.Fatalf("expected area removal, got new area %#v", c.Area)
+				}
+				if c.OldArea == nil || c.OldArea.UUID != "area-2" {
+					t.Fatalf("expected old area area-2, got %#v", c.OldArea)
+				}
+			}
+		}
+
+		if !gotProject {
+			t.Fatal("expected TaskAssignedToProject change")
+		}
+		if !gotArea {
+			t.Fatal("expected TaskAssignedToArea change")
+		}
+	})
+
+	t.Run("assigning to parent task does not emit project assignment", func(t *testing.T) {
+		parent := &things.Task{UUID: "parent-task", Title: "Parent", Type: things.TaskTypeTask}
+		if err := syncer.saveTask(parent); err != nil {
+			t.Fatalf("saveTask(parent) failed: %v", err)
+		}
+		child := &things.Task{UUID: "child-task", Title: "Child", Type: things.TaskTypeTask}
+		if err := syncer.saveTask(child); err != nil {
+			t.Fatalf("saveTask(child) failed: %v", err)
+		}
+
+		parentIDs := []string{"parent-task"}
+		payload := things.TaskActionItemPayload{ParentTaskIDs: &parentIDs}
+		payloadBytes, _ := json.Marshal(payload)
+		item := things.Item{
+			UUID:   "child-task",
+			Kind:   things.ItemKindTask,
+			Action: things.ItemActionModified,
+			P:      payloadBytes,
+		}
+
+		changes, err := syncer.processItems([]things.Item{item}, 22)
+		if err != nil {
+			t.Fatalf("processItems failed: %v", err)
+		}
+
+		for _, change := range changes {
+			if _, ok := change.(TaskAssignedToProject); ok {
+				t.Fatalf("did not expect TaskAssignedToProject for subtask assignment: %#v", change)
+			}
+		}
+	})
+}
+
 func TestStateQueries(t *testing.T) {
 	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
