@@ -495,7 +495,7 @@ func historyWrite(env writeEnvelope) error {
 		return fmt.Errorf("history sync failed: %w", err)
 	}
 	err := history.Write(env)
-	if err != nil && strings.Contains(err.Error(), "409") {
+	if isConflictError(err) {
 		log.Printf("[WRITE] 409 conflict, retrying...")
 		if err2 := history.Sync(); err2 != nil {
 			return fmt.Errorf("history re-sync failed: %w", err2)
@@ -508,6 +508,11 @@ func historyWrite(env writeEnvelope) error {
 	}
 	log.Printf("[WRITE] OK — new server index: %d", history.LatestServerIndex)
 	return nil
+}
+
+func isConflictError(err error) bool {
+	var statusErr *thingscloud.HTTPStatusError
+	return errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusConflict
 }
 
 // parseWhen interprets the when parameter. Returns (st, sr, tir, handled).
