@@ -316,6 +316,81 @@ func TestTasksInTodayWithTIR(t *testing.T) {
 	}
 }
 
+func TestProcessItemsUsesSourceServerIndex(t *testing.T) {
+	t.Parallel()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+
+	syncer, err := Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer syncer.Close()
+
+	makeTaskItem := func(uuid, title string, serverIndex int) things.Item {
+		payload := things.TaskActionItemPayload{}
+		payload.Title = &title
+		tp := things.TaskTypeTask
+		payload.Type = &tp
+
+		payloadBytes, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+
+		return things.Item{
+			UUID:        uuid,
+			Kind:        things.ItemKindTask,
+			Action:      things.ItemActionCreated,
+			P:           payloadBytes,
+			ServerIndex: intPtr(serverIndex),
+		}
+	}
+
+	items := []things.Item{
+		makeTaskItem("task-shared-slot-1", "Shared slot 1", 100),
+		makeTaskItem("task-shared-slot-2", "Shared slot 2", 100),
+	}
+
+	changes, err := syncer.processItems(items, 100)
+	if err != nil {
+		t.Fatalf("processItems failed: %v", err)
+	}
+
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changes))
+	}
+	for _, change := range changes {
+		if change.ServerIndex() != 100 {
+			t.Fatalf("change server index = %d, want 100", change.ServerIndex())
+		}
+	}
+
+	changesAfterSharedIndex, err := syncer.ChangesSinceIndex(100)
+	if err != nil {
+		t.Fatalf("ChangesSinceIndex(100) failed: %v", err)
+	}
+	if len(changesAfterSharedIndex) != 0 {
+		t.Fatalf("expected no changes after shared server index, got %d", len(changesAfterSharedIndex))
+	}
+
+	changesBeforeSharedIndex, err := syncer.ChangesSinceIndex(99)
+	if err != nil {
+		t.Fatalf("ChangesSinceIndex(99) failed: %v", err)
+	}
+	if len(changesBeforeSharedIndex) != 2 {
+		t.Fatalf("expected 2 changes after index 99, got %d", len(changesBeforeSharedIndex))
+	}
+	for _, change := range changesBeforeSharedIndex {
+		if change.ServerIndex() != 100 {
+			t.Fatalf("stored change server index = %d, want 100", change.ServerIndex())
+		}
+	}
+}
+
+func intPtr(v int) *int {
+	return &v
+}
+
 func TestIntegration_TaskAssignmentChanges(t *testing.T) {
 	t.Parallel()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
