@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 )
 
 const (
 	// APIEndpoint is the public culturedcode https endpoint
-	APIEndpoint = "https://cloud.culturedcode.com"
+	APIEndpoint        = "https://cloud.culturedcode.com"
+	defaultHTTPTimeout = 30 * time.Second
 )
 
 var (
@@ -78,7 +80,7 @@ func New(endpoint, email, password string) *Client {
 		password:   password,
 		ClientInfo: DefaultClientInfo(),
 
-		client: &http.Client{},
+		client: &http.Client{Timeout: defaultHTTPTimeout},
 	}
 	c.common.client = c
 	c.Accounts = (*AccountService)(&c.common)
