@@ -75,6 +75,22 @@ func TestTaskStorage(t *testing.T) {
 		if deleted != 1 {
 			t.Error("task not marked as deleted")
 		}
+
+		retrieved, err := syncer.getTask("to-delete")
+		if err != nil {
+			t.Fatalf("getTask after delete failed: %v", err)
+		}
+		if retrieved != nil {
+			t.Fatal("expected soft-deleted task to be hidden from getTask")
+		}
+
+		stateTask, err := syncer.State().Task("to-delete")
+		if err != nil {
+			t.Fatalf("State().Task after delete failed: %v", err)
+		}
+		if stateTask != nil {
+			t.Fatal("expected soft-deleted task to be hidden from State().Task")
+		}
 	})
 
 	t.Run("save task with all optional fields", func(t *testing.T) {

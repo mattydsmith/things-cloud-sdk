@@ -11,14 +11,14 @@ import (
 // Returns nil, nil if the task is not found.
 func (s *Syncer) getTask(uuid string) (*things.Task, error) {
 	row := s.db.QueryRow(`
-		SELECT
-			uuid, type, title, note, status, schedule,
-			scheduled_date, deadline_date, completion_date, creation_date, modification_date,
-			"index", today_index, in_trash, area_uuid, project_uuid, heading_uuid,
-			alarm_time_offset, recurrence_rule, today_index_ref, deleted
-		FROM tasks
-		WHERE uuid = ?
-	`, uuid)
+			SELECT
+				uuid, type, title, note, status, schedule,
+				scheduled_date, deadline_date, completion_date, creation_date, modification_date,
+				"index", today_index, in_trash, area_uuid, project_uuid, heading_uuid,
+				alarm_time_offset, recurrence_rule, today_index_ref, deleted
+			FROM tasks
+			WHERE uuid = ? AND deleted = 0
+		`, uuid)
 
 	var (
 		t                things.Task
