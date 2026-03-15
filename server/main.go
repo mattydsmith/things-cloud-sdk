@@ -17,6 +17,10 @@ var (
 	history *things.History
 )
 
+type initialSyncer interface {
+	Sync() ([]sync.Change, error)
+}
+
 func jsonResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
@@ -191,6 +195,16 @@ func debugAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func runInitialSync(s initialSyncer) error {
+	log.Println("Performing initial sync...")
+	changes, err := s.Sync()
+	if err != nil {
+		return fmt.Errorf("initial sync failed: %w", err)
+	}
+	log.Printf("Initial sync complete: %d changes", len(changes))
+	return nil
+}
+
 func main() {
 	username := os.Getenv("THINGS_USERNAME")
 	password := os.Getenv("THINGS_PASSWORD")
@@ -213,12 +227,8 @@ func main() {
 	}
 	defer syncer.Close()
 
-	log.Println("Performing initial sync...")
-	changes, err := syncer.Sync()
-	if err != nil {
-		log.Printf("Warning: initial sync failed: %v", err)
-	} else {
-		log.Printf("Initial sync complete: %d changes", len(changes))
+	if err := runInitialSync(syncer); err != nil {
+		log.Fatal(err)
 	}
 
 	// Get history for write operations

@@ -99,13 +99,32 @@ func formatTask(t *things.Task) taskOutput {
 	return o
 }
 
+func jsonToolResult(v any) *mcp.CallToolResult {
+	return jsonToolResultWithIndent(v, false)
+}
+
+func jsonToolResultWithIndent(v any, indent bool) *mcp.CallToolResult {
+	var (
+		b   []byte
+		err error
+	)
+	if indent {
+		b, err = json.MarshalIndent(v, "", "  ")
+	} else {
+		b, err = json.Marshal(v)
+	}
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to encode result JSON: %v", err))
+	}
+	return mcp.NewToolResultText(string(b))
+}
+
 func tasksResult(tasks []*things.Task) *mcp.CallToolResult {
 	outputs := make([]taskOutput, len(tasks))
 	for i, t := range tasks {
 		outputs[i] = formatTask(t)
 	}
-	b, _ := json.MarshalIndent(outputs, "", "  ")
-	return mcp.NewToolResultText(string(b))
+	return jsonToolResultWithIndent(outputs, true)
 }
 
 func areasResult(areas []*things.Area) *mcp.CallToolResult {
@@ -113,8 +132,7 @@ func areasResult(areas []*things.Area) *mcp.CallToolResult {
 	for i, a := range areas {
 		out[i] = areaOutput{UUID: a.UUID, Title: a.Title}
 	}
-	b, _ := json.MarshalIndent(out, "", "  ")
-	return mcp.NewToolResultText(string(b))
+	return jsonToolResultWithIndent(out, true)
 }
 
 func tagsResult(tags []*things.Tag) *mcp.CallToolResult {
@@ -122,8 +140,7 @@ func tagsResult(tags []*things.Tag) *mcp.CallToolResult {
 	for i, t := range tags {
 		out[i] = tagOutput{UUID: t.UUID, Title: t.Title, Shorthand: t.ShortHand}
 	}
-	b, _ := json.MarshalIndent(out, "", "  ")
-	return mcp.NewToolResultText(string(b))
+	return jsonToolResultWithIndent(out, true)
 }
 
 func checklistResult(items []*things.CheckListItem) *mcp.CallToolResult {
@@ -135,13 +152,11 @@ func checklistResult(items []*things.CheckListItem) *mcp.CallToolResult {
 		}
 		out[i] = checklistOutput{UUID: c.UUID, Title: c.Title, Status: s}
 	}
-	b, _ := json.MarshalIndent(out, "", "  ")
-	return mcp.NewToolResultText(string(b))
+	return jsonToolResultWithIndent(out, true)
 }
 
 func writeResult(fields map[string]string) *mcp.CallToolResult {
-	b, _ := json.Marshal(fields)
-	return mcp.NewToolResultText(string(b))
+	return jsonToolResult(fields)
 }
 
 func syncForMCPReadResult() *mcp.CallToolResult {
@@ -321,8 +336,7 @@ func mcpGetTask(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult
 	if task == nil {
 		return mcp.NewToolResultError("task not found"), nil
 	}
-	b, _ := json.MarshalIndent(formatTask(task), "", "  ")
-	return mcp.NewToolResultText(string(b)), nil
+	return jsonToolResultWithIndent(formatTask(task), true), nil
 }
 
 func mcpGetArea(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -340,8 +354,7 @@ func mcpGetArea(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult
 	if area == nil {
 		return mcp.NewToolResultError("area not found"), nil
 	}
-	b, _ := json.MarshalIndent(areaOutput{UUID: area.UUID, Title: area.Title}, "", "  ")
-	return mcp.NewToolResultText(string(b)), nil
+	return jsonToolResultWithIndent(areaOutput{UUID: area.UUID, Title: area.Title}, true), nil
 }
 
 func mcpGetTag(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -359,8 +372,7 @@ func mcpGetTag(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult,
 	if tag == nil {
 		return mcp.NewToolResultError("tag not found"), nil
 	}
-	b, _ := json.MarshalIndent(tagOutput{UUID: tag.UUID, Title: tag.Title, Shorthand: tag.ShortHand}, "", "  ")
-	return mcp.NewToolResultText(string(b)), nil
+	return jsonToolResultWithIndent(tagOutput{UUID: tag.UUID, Title: tag.Title, Shorthand: tag.ShortHand}, true), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -690,12 +702,11 @@ func mcpSmokeTest(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult
 
 	if taskUUID == "" {
 		// Can't continue without the task
-		b, _ := json.MarshalIndent(map[string]any{
+		return jsonToolResultWithIndent(map[string]any{
 			"passed": countStatus(checks, "pass"),
 			"failed": countStatus(checks, "fail"),
 			"checks": checks,
-		}, "", "  ")
-		return mcp.NewToolResultText(string(b)), nil
+		}, true), nil
 	}
 
 	// 5. Get task
@@ -761,12 +772,11 @@ func mcpSmokeTest(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult
 		return trashTask(taskUUID)
 	})
 
-	b, _ := json.MarshalIndent(map[string]any{
+	return jsonToolResultWithIndent(map[string]any{
 		"passed": countStatus(checks, "pass"),
 		"failed": countStatus(checks, "fail"),
 		"checks": checks,
-	}, "", "  ")
-	return mcp.NewToolResultText(string(b)), nil
+	}, true), nil
 }
 
 func countStatus(checks []smokeCheck, status string) int {
