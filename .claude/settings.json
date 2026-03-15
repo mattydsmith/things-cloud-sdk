@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push *)",
+      "Bash(git push)",
+      "Bash(git merge *)",
+      "Bash(git commit *)",
+      "Bash(git add *)",
+      "Bash(git fetch *)",
+      "Bash(git rebase *)",
+      "Bash(fly *)"
+    ]
+  }
+}
