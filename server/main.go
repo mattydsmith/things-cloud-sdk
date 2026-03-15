@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	things "github.com/arthursoares/things-cloud-sdk"
 	"github.com/arthursoares/things-cloud-sdk/sync"
@@ -20,6 +25,13 @@ var (
 type initialSyncer interface {
 	Sync() ([]sync.Change, error)
 }
+
+type shutdownServer interface {
+	ListenAndServe() error
+	Shutdown(context.Context) error
+}
+
+const shutdownTimeout = 10 * time.Second
 
 func jsonResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -202,6 +214,43 @@ func runInitialSync(s initialSyncer) error {
 		return fmt.Errorf("initial sync failed: %w", err)
 	}
 	log.Printf("Initial sync complete: %d changes", len(changes))
+	return nil
+}
+
+func serveWithGracefulShutdown(ctx context.Context, srv shutdownServer, timeout time.Duration) error {
+	serverStopped := make(chan struct{})
+	shutdownErrCh := make(chan error, 1)
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			shutdownErrCh <- srv.Shutdown(shutdownCtx)
+		case <-serverStopped:
+		}
+	}()
+
+	err := srv.ListenAndServe()
+	close(serverStopped)
+
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+
+	select {
+	case shutdownErr := <-shutdownErrCh:
+		if shutdownErr != nil && !errors.Is(shutdownErr, http.ErrServerClosed) {
+			log.Printf("graceful shutdown failed: %v", shutdownErr)
+		}
+	case <-ctx.Done():
+		shutdownErr := <-shutdownErrCh
+		if shutdownErr != nil && !errors.Is(shutdownErr, http.ErrServerClosed) {
+			log.Printf("graceful shutdown failed: %v", shutdownErr)
+		}
+	default:
+	}
+
 	return nil
 }
 
@@ -391,8 +440,12 @@ func main() {
 	// MCP endpoint (no bearer auth — claude.ai connectors use OAuth which we don't implement)
 	http.Handle("/mcp", newMCPHandler())
 
+	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	server := &http.Server{Addr: ":" + port}
+
 	log.Printf("Starting server on :%s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	if err := serveWithGracefulShutdown(shutdownCtx, server, shutdownTimeout); err != nil {
 		log.Fatal(err)
 	}
 }
