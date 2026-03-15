@@ -14,30 +14,17 @@ This was initially interpreted as possible cloud sync lag only. Investigation fo
 ### 2026-03-04 (morning review)
 
 - `things_list_today` returned **1 of 7** tasks scheduled for 2026-03-04.
-- Missing tasks included:
-  - `DAhN8vdMnwKkt5E8zpWApF` (Buy a butter knife)
-  - `6w1ZR4PD8wnvFHowx69WjP` (Complete Mandatory Course — Responsible AI Usage)
-  - `BBbThjy2qJBaUPt4f16cxY` (Complete Internet Security course)
-  - `GSM4zbd4Bqmrzjr22THHmC` (MJ)
-  - `Fkw69K4Ktbo8kkKeoP1JbX` (Take tablet)
-  - `SXUtCPjGXu4JGe8aPpHsTL` (Morning Review)
-- Returned task:
-  - `Acbz2YfJvTKpFC1xH1Y1Vw` (Follow up with Saloni re email about Emma and ITPB)
+- 6 tasks were missing from the MCP response despite being visible in Things Today.
 
 ### 2026-03-04 07:29
 
 - Second test: `things_list_today` returned all 12 tasks expected for that day.
-- Cross-check against Things app screenshot still showed one mismatch:
-  - `Acbz2YfJvTKpFC1xH1Y1Vw` returned by MCP as `scheduled_for=2026-03-04`, but not shown in Things Today.
+- Cross-check against Things app screenshot still showed one mismatch: a task returned by MCP as `scheduled_for=2026-03-04` was not shown in Things Today.
 
 ### 2026-03-05 (morning review)
 
-- MCP (`things_list_all_tasks` filtered by date) reported overdue tasks not in Things Today:
-  - `97Fmh6wiwmgizcaix1m8yz` (`scheduled_for=2026-03-01`)
-  - `Acbz2YfJvTKpFC1xH1Y1Vw` (`scheduled_for=2026-03-04`)
-  - `DAhN8vdMnwKkt5E8zpWApF` (`scheduled_for=2026-03-04`)
-- Also observed inverse mismatch:
-  - `CDQtNQSZhZiwPW2VSASCff` visible in Things Today but MCP still reported `scheduled_for=2026-03-04`.
+- MCP (`things_list_all_tasks` filtered by date) reported overdue tasks not in Things Today (stale `scheduled_for` values from previous days).
+- Also observed inverse mismatch: a task visible in Things Today had a stale `scheduled_for` date in the MCP response.
 
 ## Impact
 

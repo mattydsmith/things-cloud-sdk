@@ -3,7 +3,7 @@
 **Date:** 2026-02-17
 **Crash date:** 2026-02-16 23:36:35 UTC
 **App:** Things 3.22.10 (build 32210502) — Mac, also reproduced on iPad
-**Account:** mattydsmith+things@gmail.com (now deleted, replaced with mattydsmith@mac.com)
+**Account:** Test account (now deleted and replaced)
 
 ## Crash Report Summary
 
@@ -73,7 +73,7 @@ The Things Cloud API endpoint `GET /version/1/account/{email}/own-history-keys` 
 
 ## Reproduction Attempts
 
-We tested each feature type individually on a fresh account (mattydsmith@mac.com). Things synced successfully after each test:
+We tested each feature type individually on a fresh account. Things synced successfully after each test:
 
 | Test | Operation | Result |
 |------|-----------|--------|
@@ -96,10 +96,10 @@ We tested each feature type individually on a fresh account (mattydsmith@mac.com
 
 During investigation:
 
-- **Account:** Deleted `mattydsmith+things@gmail.com`, created `mattydsmith@mac.com` (no `+` in email)
+- **Account:** Deleted original test account, created replacement (no `+` in email)
 - **Region:** Moved Fly.io machine from `iad` (US East) to `lhr` (London)
-- **Machine ID:** `e82949df245278` (was `48e3793f052358`)
-- **History key:** `30eff819-11d8-4e0a-846e-5dc8fe267f58`
+- **Machine ID:** Replaced
+- **History key:** Replaced
 - **Verbose logging:** `client.Debug = true` and `[WRITE]` logging in `historyWrite()` remain enabled for future diagnostics
 
 ## SDK Fixes
@@ -116,6 +116,4 @@ During investigation:
 
 ## Crash Report
 
-Full crash report: `/Users/mattsmith/Library/Logs/DiagnosticReports/Retired/Things3-2026-02-16-233635.ips`
-
-Old history dump: `/tmp/things-history.json` (2.4MB, 503 commits)
+Full crash report and old history dump were local artifacts not checked into this repo.

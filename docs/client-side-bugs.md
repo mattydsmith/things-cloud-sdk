@@ -201,7 +201,7 @@ Key differences:
 
 ### Verification
 
-Tested on account **things33** (2026-02-10):
+Tested on a fresh account (2026-02-10):
 - Task creation (no note) — syncs and displays correctly
 - Task creation with note (single commit) — syncs and displays correctly
 - Task editing, completion, trashing — all work
@@ -295,7 +295,7 @@ The `/items` endpoint doesn't require authentication — you can curl it directl
 
 ### Verification
 
-Tested on account **things36** (2026-02-11):
+Tested on a fresh account (2026-02-11):
 - Fresh sync from index 0 — works
 - Incremental sync — works (no 500)
 - Multiple consecutive syncs — works
