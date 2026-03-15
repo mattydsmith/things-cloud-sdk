@@ -9,12 +9,16 @@ import (
 
 // State provides read-only access to the synced Things state
 type State struct {
-	db dbExecutor
+	syncer *Syncer
 }
 
 // State returns a read-only view of the current aggregated state
 func (s *Syncer) State() *State {
-	return &State{db: s.rawDB}
+	return &State{syncer: s}
+}
+
+func (st *State) executor() dbExecutor {
+	return st.syncer.rawDB
 }
 
 // QueryOpts controls filtering for state queries
@@ -25,17 +29,23 @@ type QueryOpts struct {
 
 // Task retrieves a task by UUID
 func (st *State) Task(uuid string) (*things.Task, error) {
-	return (&Syncer{db: st.db}).getTask(uuid)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+	return st.syncer.readSyncer().getTask(uuid)
 }
 
 // Area retrieves an area by UUID
 func (st *State) Area(uuid string) (*things.Area, error) {
-	return (&Syncer{db: st.db}).getArea(uuid)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+	return st.syncer.readSyncer().getArea(uuid)
 }
 
 // Tag retrieves a tag by UUID
 func (st *State) Tag(uuid string) (*things.Tag, error) {
-	return (&Syncer{db: st.db}).getTag(uuid)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+	return st.syncer.readSyncer().getTag(uuid)
 }
 
 // AllTasks returns all tasks matching the query options
@@ -66,7 +76,10 @@ func (st *State) AllProjects(opts QueryOpts) ([]*things.Task, error) {
 
 // AllAreas returns all areas
 func (st *State) AllAreas() ([]*things.Area, error) {
-	rows, err := st.db.Query(`SELECT uuid, title FROM areas WHERE deleted = 0 ORDER BY "index"`)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+
+	rows, err := st.executor().Query(`SELECT uuid, title FROM areas WHERE deleted = 0 ORDER BY "index"`)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +98,10 @@ func (st *State) AllAreas() ([]*things.Area, error) {
 
 // AllTags returns all tags
 func (st *State) AllTags() ([]*things.Tag, error) {
-	rows, err := st.db.Query(`SELECT uuid, title, shortcut FROM tags WHERE deleted = 0 ORDER BY "index"`)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+
+	rows, err := st.executor().Query(`SELECT uuid, title, shortcut FROM tags WHERE deleted = 0 ORDER BY "index"`)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +155,10 @@ func (st *State) TasksInToday(opts QueryOpts) ([]*things.Task, error) {
 	}
 	query += ` ORDER BY today_index, "index"`
 
-	rows, err := st.db.Query(query, todayUnix, tomorrowUnix, todayUnix, tomorrowUnix)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+
+	rows, err := st.executor().Query(query, todayUnix, tomorrowUnix, todayUnix, tomorrowUnix)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +177,10 @@ func (st *State) TasksInProject(projectUUID string, opts QueryOpts) ([]*things.T
 	}
 	query += ` ORDER BY "index"`
 
-	rows, err := st.db.Query(query, projectUUID)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+
+	rows, err := st.executor().Query(query, projectUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +199,10 @@ func (st *State) TasksInArea(areaUUID string, opts QueryOpts) ([]*things.Task, e
 	}
 	query += ` ORDER BY "index"`
 
-	rows, err := st.db.Query(query, areaUUID)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+
+	rows, err := st.executor().Query(query, areaUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +235,10 @@ func (st *State) CompletedTasksInRange(limit int, completedAfter, completedBefor
 	query += ` ORDER BY completion_date DESC LIMIT ?`
 	args = append(args, limit)
 
-	rows, err := st.db.Query(query, args...)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+
+	rows, err := st.executor().Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -220,10 +248,13 @@ func (st *State) CompletedTasksInRange(limit int, completedAfter, completedBefor
 
 // ChecklistItems returns checklist items for a task
 func (st *State) ChecklistItems(taskUUID string) ([]*things.CheckListItem, error) {
-	rows, err := st.db.Query(`
-		SELECT uuid, title, status, "index"
-		FROM checklist_items
-		WHERE task_uuid = ? AND deleted = 0
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+
+	rows, err := st.executor().Query(`
+			SELECT uuid, title, status, "index"
+			FROM checklist_items
+			WHERE task_uuid = ? AND deleted = 0
 		ORDER BY "index"
 	`, taskUUID)
 	if err != nil {
@@ -248,7 +279,10 @@ func (st *State) ChecklistItems(taskUUID string) ([]*things.CheckListItem, error
 // Helper methods
 
 func (st *State) queryTasks(query string) ([]*things.Task, error) {
-	rows, err := st.db.Query(query)
+	st.syncer.mu.RLock()
+	defer st.syncer.mu.RUnlock()
+
+	rows, err := st.executor().Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +292,7 @@ func (st *State) queryTasks(query string) ([]*things.Task, error) {
 
 func (st *State) scanTaskUUIDs(rows *sql.Rows) ([]*things.Task, error) {
 	var tasks []*things.Task
-	syncer := &Syncer{db: st.db}
+	syncer := st.syncer.readSyncer()
 
 	for rows.Next() {
 		var uuid string

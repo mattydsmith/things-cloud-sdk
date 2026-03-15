@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	things "github.com/arthursoares/things-cloud-sdk"
 )
 
 func TestOpen(t *testing.T) {
@@ -66,4 +69,72 @@ func TestOpen(t *testing.T) {
 			t.Fatalf("Expected 'Test Area', got %q", title)
 		}
 	})
+}
+
+func TestReadQueriesWaitForSyncLock(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	syncer, err := Open(dbPath, nil)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer syncer.Close()
+
+	if err := syncer.saveTask(&things.Task{
+		UUID:     "task-1",
+		Title:    "Task 1",
+		Type:     things.TaskTypeTask,
+		Status:   things.TaskStatusPending,
+		Schedule: things.TaskScheduleAnytime,
+	}); err != nil {
+		t.Fatalf("saveTask failed: %v", err)
+	}
+
+	state := syncer.State()
+	syncer.mu.Lock()
+
+	taskDone := make(chan error, 1)
+	go func() {
+		_, err := state.Task("task-1")
+		taskDone <- err
+	}()
+
+	changeDone := make(chan error, 1)
+	go func() {
+		_, err := syncer.ChangesSinceIndex(-1)
+		changeDone <- err
+	}()
+
+	select {
+	case err := <-taskDone:
+		t.Fatalf("State().Task should block while sync lock is held, returned early with %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	select {
+	case err := <-changeDone:
+		t.Fatalf("ChangesSinceIndex should block while sync lock is held, returned early with %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	syncer.mu.Unlock()
+
+	select {
+	case err := <-taskDone:
+		if err != nil {
+			t.Fatalf("State().Task failed after lock release: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("State().Task did not resume after lock release")
+	}
+
+	select {
+	case err := <-changeDone:
+		if err != nil {
+			t.Fatalf("ChangesSinceIndex failed after lock release: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ChangesSinceIndex did not resume after lock release")
+	}
 }

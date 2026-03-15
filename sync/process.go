@@ -24,10 +24,7 @@ func (s *Syncer) processItems(items []things.Item, baseIndex int) ([]Change, err
 	}
 	defer tx.Rollback() // No-op if committed
 
-	// Store original db, swap in transaction
-	origDB := s.db
-	s.db = tx
-	defer func() { s.db = origDB }()
+	txSyncer := s.withDB(tx)
 
 	var allChanges []Change
 
@@ -38,7 +35,7 @@ func (s *Syncer) processItems(items []things.Item, baseIndex int) ([]Change, err
 		}
 		ts := time.Now()
 
-		changes, err := s.processItem(item, serverIndex, ts)
+		changes, err := txSyncer.processItem(item, serverIndex, ts)
 		if err != nil {
 			return nil, fmt.Errorf("processing item %s: %w", item.UUID, err)
 		}
@@ -46,7 +43,7 @@ func (s *Syncer) processItems(items []things.Item, baseIndex int) ([]Change, err
 		// Log each change
 		for _, change := range changes {
 			payload, _ := json.Marshal(item.P)
-			if err := s.logChange(serverIndex, change, string(payload)); err != nil {
+			if err := txSyncer.logChange(serverIndex, change, string(payload)); err != nil {
 				return nil, fmt.Errorf("logging change: %w", err)
 			}
 		}
