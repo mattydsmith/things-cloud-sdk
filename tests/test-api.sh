@@ -110,13 +110,22 @@ echo "--- Auth ---"
 check "no auth returns 401" "$(api_get_no_auth /api/verify)" "401"
 check "with auth returns 200" "$(api_get_status /api/verify)" "200"
 
-# 4-9. Read endpoints
+# 4-12. Read endpoints
 echo "--- Read Endpoints ---"
 RESP=$(api_get "/api/tasks/today")
 check "today returns array" "$(is_array "$RESP")" "true"
 
 RESP=$(api_get "/api/tasks/inbox")
 check "inbox returns array" "$(is_array "$RESP")" "true"
+
+RESP=$(api_get "/api/tasks/anytime")
+check "anytime returns array" "$(is_array "$RESP")" "true"
+
+RESP=$(api_get "/api/tasks/someday")
+check "someday returns array" "$(is_array "$RESP")" "true"
+
+RESP=$(api_get "/api/tasks/upcoming")
+check "upcoming returns array" "$(is_array "$RESP")" "true"
 
 RESP=$(api_get "/api/projects")
 check "projects returns array" "$(is_array "$RESP")" "true"
@@ -130,7 +139,7 @@ check "tags returns array" "$(is_array "$RESP")" "true"
 RESP=$(api_get "/api/sync")
 check "sync returns changes_count" "$([ -n "$(json_field "$RESP" changes_count)" ] && echo ok || echo '')" "ok"
 
-# 10-13. Write endpoints
+# 13-16. Write endpoints
 echo "--- Write Endpoints ---"
 RESP=$(api_post "/api/tasks/create" '{"title":"[api-test] Task"}')
 check "create returns status" "$(json_field "$RESP" status)" "created"
@@ -146,7 +155,7 @@ check "complete returns status" "$(json_field "$RESP" status)" "completed"
 RESP=$(api_post "/api/tasks/trash" "{\"uuid\":\"${CREATED_UUID}\"}")
 check "trash returns status" "$(json_field "$RESP" status)" "trashed"
 
-# 14-16. Validation
+# 17-19. Validation
 echo "--- Validation ---"
 RESP=$(api_post "/api/tasks/create" '{}')
 check "create no title returns error" "$(json_field "$RESP" error)" "title is required"

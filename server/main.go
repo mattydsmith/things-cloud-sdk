@@ -132,6 +132,75 @@ func handleToday(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, tasks)
 }
 
+func handleAnytime(w http.ResponseWriter, r *http.Request) {
+	opts, err := paginationQueryOpts(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := syncForRead(); err != nil {
+		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+	state := syncer.State()
+	tasks, err := state.TasksInAnytime(opts)
+	if err != nil {
+		jsonError(w, fmt.Sprintf("failed to get anytime: %v", err), 500)
+		return
+	}
+	if tasks == nil {
+		jsonResponse(w, []*things.Task{})
+		return
+	}
+	jsonResponse(w, tasks)
+}
+
+func handleSomeday(w http.ResponseWriter, r *http.Request) {
+	opts, err := paginationQueryOpts(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := syncForRead(); err != nil {
+		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+	state := syncer.State()
+	tasks, err := state.TasksInSomeday(opts)
+	if err != nil {
+		jsonError(w, fmt.Sprintf("failed to get someday: %v", err), 500)
+		return
+	}
+	if tasks == nil {
+		jsonResponse(w, []*things.Task{})
+		return
+	}
+	jsonResponse(w, tasks)
+}
+
+func handleUpcoming(w http.ResponseWriter, r *http.Request) {
+	opts, err := paginationQueryOpts(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := syncForRead(); err != nil {
+		jsonError(w, fmt.Sprintf("pre-read sync failed: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+	state := syncer.State()
+	tasks, err := state.TasksInUpcoming(opts)
+	if err != nil {
+		jsonError(w, fmt.Sprintf("failed to get upcoming: %v", err), 500)
+		return
+	}
+	if tasks == nil {
+		jsonResponse(w, []*things.Task{})
+		return
+	}
+	jsonResponse(w, tasks)
+}
+
 func handleProjects(w http.ResponseWriter, r *http.Request) {
 	opts, err := paginationQueryOpts(r)
 	if err != nil {
@@ -349,6 +418,9 @@ func main() {
 	http.HandleFunc("/api/sync", authMiddleware(handleSync))
 	http.HandleFunc("/api/tasks/inbox", authMiddleware(handleInbox))
 	http.HandleFunc("/api/tasks/today", authMiddleware(handleToday))
+	http.HandleFunc("/api/tasks/anytime", authMiddleware(handleAnytime))
+	http.HandleFunc("/api/tasks/someday", authMiddleware(handleSomeday))
+	http.HandleFunc("/api/tasks/upcoming", authMiddleware(handleUpcoming))
 	http.HandleFunc("/api/projects", authMiddleware(handleProjects))
 	http.HandleFunc("/api/areas", authMiddleware(handleAreas))
 	http.HandleFunc("/api/tags", authMiddleware(handleTags))

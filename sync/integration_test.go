@@ -581,9 +581,15 @@ func TestStateQueries(t *testing.T) {
 	completedAtRecent := time.Date(2026, 3, 5, 10, 30, 0, 0, time.UTC)
 	completedAtOlder := time.Date(2026, 3, 4, 8, 15, 0, 0, time.UTC)
 	todayRef := time.Now().UTC()
+	futureRef := time.Now().UTC().Add(48 * time.Hour)
+	pastRef := time.Now().UTC().Add(-48 * time.Hour)
 	syncer.saveTask(&things.Task{UUID: "inbox-1", Title: "Inbox Task", Schedule: things.TaskScheduleInbox, Status: things.TaskStatusPending})
 	syncer.saveTask(&things.Task{UUID: "anytime-1", Title: "Anytime Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusPending})
 	syncer.saveTask(&things.Task{UUID: "today-ref-1", Title: "Today via tir", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusPending, TodayIndexReference: &todayRef})
+	syncer.saveTask(&things.Task{UUID: "someday-1", Title: "Someday Task", Schedule: things.TaskScheduleSomeday, Status: things.TaskStatusPending})
+	syncer.saveTask(&things.Task{UUID: "someday-past-1", Title: "Someday Past Task", Schedule: things.TaskScheduleSomeday, Status: things.TaskStatusPending, ScheduledDate: &pastRef})
+	syncer.saveTask(&things.Task{UUID: "upcoming-1", Title: "Upcoming Task", Schedule: things.TaskScheduleSomeday, Status: things.TaskStatusPending, ScheduledDate: &futureRef})
+	syncer.saveTask(&things.Task{UUID: "upcoming-ref-1", Title: "Upcoming via tir", Schedule: things.TaskScheduleSomeday, Status: things.TaskStatusPending, TodayIndexReference: &futureRef})
 	syncer.saveTask(&things.Task{UUID: "completed-1", Title: "Completed Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusCompleted, CompletionDate: &completedAtRecent})
 	syncer.saveTask(&things.Task{UUID: "completed-2", Title: "Older Completed Task", Schedule: things.TaskScheduleAnytime, Status: things.TaskStatusCompleted, CompletionDate: &completedAtOlder})
 	syncer.saveTask(&things.Task{UUID: "trashed-1", Title: "Trashed Task", InTrash: true})
@@ -653,6 +659,45 @@ func TestStateQueries(t *testing.T) {
 		}
 		if tasks[0].UUID != "today-ref-1" {
 			t.Fatalf("expected today-ref-1, got %s", tasks[0].UUID)
+		}
+	})
+
+	t.Run("TasksInAnytime returns undated anytime tasks", func(t *testing.T) {
+		tasks, err := state.TasksInAnytime(QueryOpts{})
+		if err != nil {
+			t.Fatalf("TasksInAnytime failed: %v", err)
+		}
+		if len(tasks) != 1 {
+			t.Fatalf("expected 1 anytime task, got %d", len(tasks))
+		}
+		if tasks[0].UUID != "anytime-1" {
+			t.Fatalf("expected anytime-1, got %s", tasks[0].UUID)
+		}
+	})
+
+	t.Run("TasksInSomeday returns deferred tasks that are not upcoming", func(t *testing.T) {
+		tasks, err := state.TasksInSomeday(QueryOpts{})
+		if err != nil {
+			t.Fatalf("TasksInSomeday failed: %v", err)
+		}
+		if len(tasks) != 2 {
+			t.Fatalf("expected 2 someday tasks, got %d", len(tasks))
+		}
+		if tasks[0].UUID != "someday-1" || tasks[1].UUID != "someday-past-1" {
+			t.Fatalf("unexpected someday tasks: %s, %s", tasks[0].UUID, tasks[1].UUID)
+		}
+	})
+
+	t.Run("TasksInUpcoming returns deferred future-dated tasks", func(t *testing.T) {
+		tasks, err := state.TasksInUpcoming(QueryOpts{})
+		if err != nil {
+			t.Fatalf("TasksInUpcoming failed: %v", err)
+		}
+		if len(tasks) != 2 {
+			t.Fatalf("expected 2 upcoming tasks, got %d", len(tasks))
+		}
+		if tasks[0].UUID != "upcoming-1" || tasks[1].UUID != "upcoming-ref-1" {
+			t.Fatalf("unexpected upcoming tasks: %s, %s", tasks[0].UUID, tasks[1].UUID)
 		}
 	})
 

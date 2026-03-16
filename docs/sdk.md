@@ -281,6 +281,8 @@ state := syncer.State()
 inbox, _ := state.TasksInInbox(sync.QueryOpts{})
 today, _ := state.TasksInToday(sync.QueryOpts{})
 anytime, _ := state.TasksInAnytime(sync.QueryOpts{})
+someday, _ := state.TasksInSomeday(sync.QueryOpts{})
+upcoming, _ := state.TasksInUpcoming(sync.QueryOpts{})
 
 // Query by container
 tasks, _ := state.TasksInProject(projectUUID, sync.QueryOpts{})

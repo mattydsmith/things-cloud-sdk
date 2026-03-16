@@ -215,6 +215,21 @@ func mcpListToday(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 	return tasksResult(tasks), nil
 }
 
+func mcpListAnytime(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	opts, err := mcpPaginationOpts(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if syncErr := syncForMCPReadResult(); syncErr != nil {
+		return syncErr, nil
+	}
+	tasks, err := syncer.State().TasksInAnytime(opts)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return tasksResult(tasks), nil
+}
+
 func mcpListInbox(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	opts, err := mcpPaginationOpts(req)
 	if err != nil {
@@ -224,6 +239,36 @@ func mcpListInbox(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResu
 		return syncErr, nil
 	}
 	tasks, err := syncer.State().TasksInInbox(opts)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return tasksResult(tasks), nil
+}
+
+func mcpListSomeday(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	opts, err := mcpPaginationOpts(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if syncErr := syncForMCPReadResult(); syncErr != nil {
+		return syncErr, nil
+	}
+	tasks, err := syncer.State().TasksInSomeday(opts)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return tasksResult(tasks), nil
+}
+
+func mcpListUpcoming(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	opts, err := mcpPaginationOpts(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if syncErr := syncForMCPReadResult(); syncErr != nil {
+		return syncErr, nil
+	}
+	tasks, err := syncer.State().TasksInUpcoming(opts)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -840,7 +885,7 @@ func countStatus(checks []smokeCheck, status string) int {
 // ---------------------------------------------------------------------------
 
 func newMCPHandler() http.Handler {
-	s := server.NewMCPServer("Things Cloud", "1.0.0")
+	s := server.NewMCPServer("Things Cloud", "1.1.0")
 
 	// --- Read tools ---
 
@@ -857,6 +902,19 @@ func newMCPHandler() http.Handler {
 		),
 	), mcpListToday)
 
+	s.AddTool(mcp.NewTool("things_list_anytime",
+		mcp.WithDescription("List tasks in the Things Anytime view"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithNumber("limit",
+			mcp.Description("Maximum number of tasks to return"),
+			mcp.Min(0),
+		),
+		mcp.WithNumber("offset",
+			mcp.Description("Number of tasks to skip before returning results"),
+			mcp.Min(0),
+		),
+	), mcpListAnytime)
+
 	s.AddTool(mcp.NewTool("things_list_inbox",
 		mcp.WithDescription("List tasks in the Things inbox"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -869,6 +927,32 @@ func newMCPHandler() http.Handler {
 			mcp.Min(0),
 		),
 	), mcpListInbox)
+
+	s.AddTool(mcp.NewTool("things_list_someday",
+		mcp.WithDescription("List tasks in the Things Someday view"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithNumber("limit",
+			mcp.Description("Maximum number of tasks to return"),
+			mcp.Min(0),
+		),
+		mcp.WithNumber("offset",
+			mcp.Description("Number of tasks to skip before returning results"),
+			mcp.Min(0),
+		),
+	), mcpListSomeday)
+
+	s.AddTool(mcp.NewTool("things_list_upcoming",
+		mcp.WithDescription("List tasks in the Things Upcoming view"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithNumber("limit",
+			mcp.Description("Maximum number of tasks to return"),
+			mcp.Min(0),
+		),
+		mcp.WithNumber("offset",
+			mcp.Description("Number of tasks to skip before returning results"),
+			mcp.Min(0),
+		),
+	), mcpListUpcoming)
 
 	s.AddTool(mcp.NewTool("things_list_projects",
 		mcp.WithDescription("List all projects in Things"),

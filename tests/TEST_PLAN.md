@@ -165,7 +165,7 @@ Each cycle creates test entities with a `[test-NNN]` prefix, runs checks, then c
 
 ## 3. MCP Read Tools (`test-mcp-read.sh`)
 
-**Status: Implemented — 29/29 passing**
+**Status: Implemented — 32/32 passing**
 
 These tests verify all read-only MCP tools return valid responses. They don't create test data — they rely on existing Things data (plus anything left from a write test cycle).
 
@@ -175,40 +175,43 @@ These tests verify all read-only MCP tools return valid responses. They don't cr
 |---|------|--------|
 | 1 | `things_list_today` | Returns array; each item has uuid, title, status fields |
 | 2 | `things_list_inbox` | Returns array; items have uuid, title, status |
-| 3 | `things_list_all_tasks` | Returns non-empty array (account has tasks) |
-| 4 | `things_list_projects` | Returns array; items have uuid, title |
-| 5 | `things_list_areas` | Returns array; items have uuid, title |
-| 6 | `things_list_tags` | Returns array; items have uuid, title |
+| 3 | `things_list_anytime` | Returns array |
+| 4 | `things_list_someday` | Returns array |
+| 5 | `things_list_upcoming` | Returns array |
+| 6 | `things_list_all_tasks` | Returns non-empty array (account has tasks) |
+| 7 | `things_list_projects` | Returns array; items have uuid, title |
+| 8 | `things_list_areas` | Returns array; items have uuid, title |
+| 9 | `things_list_tags` | Returns array; items have uuid, title |
 
 ### Parameterised list tools
 
 | # | Tool | Checks |
 |---|------|--------|
-| 7 | `things_list_project_tasks` | Pick first project UUID from #4; returns array of tasks |
-| 8 | `things_list_area_tasks` | Pick first area UUID from #5; returns array of tasks |
-| 9 | `things_list_checklist_items` | Find a task with checklists (or skip); returns array |
+| 10 | `things_list_project_tasks` | Pick first project UUID from #7; returns array of tasks |
+| 11 | `things_list_area_tasks` | Pick first area UUID from #8; returns array of tasks |
+| 12 | `things_list_checklist_items` | Find a task with checklists (or skip); returns array |
 
 ### Get tools (return single objects)
 
 | # | Tool | Checks |
 |---|------|--------|
-| 10 | `things_get_task` | Pick first task UUID from #1 or #3; returns object with uuid, title, status |
-| 11 | `things_get_area` | Pick first area UUID from #5; returns object with uuid, title |
-| 12 | `things_get_tag` | Pick first tag UUID from #6; returns object with uuid, title |
+| 13 | `things_get_task` | Pick first task UUID from #1 or #6; returns object with uuid, title, status |
+| 14 | `things_get_area` | Pick first area UUID from #8; returns object with uuid, title |
+| 15 | `things_get_tag` | Pick first tag UUID from #9; returns object with uuid, title |
 
 ### Error handling
 
 | # | Tool | Input | Expected |
 |---|------|-------|----------|
-| 13 | `things_get_task` | uuid=`nonexistent-uuid` | MCP error or empty result |
-| 14 | `things_list_project_tasks` | project_uuid=`nonexistent-uuid` | Empty array or error |
-| 15 | `things_list_checklist_items` | task_uuid=`nonexistent-uuid` | Empty array or error |
+| 16 | `things_get_task` | uuid=`nonexistent-uuid` | MCP error or empty result |
+| 17 | `things_list_project_tasks` | project_uuid=`nonexistent-uuid` | Empty array or error |
+| 18 | `things_list_checklist_items` | task_uuid=`nonexistent-uuid` | Empty array or error |
 
 ---
 
 ## 4. REST API Endpoints (`test-api.sh`)
 
-**Status: Implemented — 18/18 passing**
+**Status: Implemented — 21/21 passing**
 
 Tests the `/api/*` endpoints which require Bearer token auth. Pass API key as second arg or via `API_KEY` env var.
 
@@ -226,33 +229,36 @@ Tests the `/api/*` endpoints which require Bearer token auth. Pass API key as se
 |---|----------|-------|
 | 4 | `GET /api/tasks/today` | Returns JSON array of tasks |
 | 5 | `GET /api/tasks/inbox` | Returns JSON array of tasks |
-| 6 | `GET /api/projects` | Returns JSON array of projects |
-| 7 | `GET /api/areas` | Returns JSON array of areas |
-| 8 | `GET /api/tags` | Returns JSON array of tags |
-| 9 | `GET /api/sync` | Returns `{"changes_count": N}` |
+| 6 | `GET /api/tasks/anytime` | Returns JSON array of tasks |
+| 7 | `GET /api/tasks/someday` | Returns JSON array of tasks |
+| 8 | `GET /api/tasks/upcoming` | Returns JSON array of tasks |
+| 9 | `GET /api/projects` | Returns JSON array of projects |
+| 10 | `GET /api/areas` | Returns JSON array of areas |
+| 11 | `GET /api/tags` | Returns JSON array of tags |
+| 12 | `GET /api/sync` | Returns `{"changes_count": N}` |
 
 ### Write endpoints
 
 | # | Endpoint | Body | Check |
 |---|----------|------|-------|
-| 10 | `POST /api/tasks/create` | `{"title":"[api-test] Task"}` | Returns uuid, status=created |
-| 11 | `POST /api/tasks/edit` | `{"uuid":"...","title":"..."}` | Returns status=updated |
-| 12 | `POST /api/tasks/complete` | `{"uuid":"..."}` | Returns status=completed |
-| 13 | `POST /api/tasks/trash` | `{"uuid":"..."}` | Returns status=trashed |
+| 13 | `POST /api/tasks/create` | `{"title":"[api-test] Task"}` | Returns uuid, status=created |
+| 14 | `POST /api/tasks/edit` | `{"uuid":"...","title":"..."}` | Returns status=updated |
+| 15 | `POST /api/tasks/complete` | `{"uuid":"..."}` | Returns status=completed |
+| 16 | `POST /api/tasks/trash` | `{"uuid":"..."}` | Returns status=trashed |
 
 ### Write endpoint validation
 
 | # | Endpoint | Body | Expected |
 |---|----------|------|----------|
-| 14 | `POST /api/tasks/create` | `{}` (no title) | 400 "title is required" |
-| 15 | `POST /api/tasks/complete` | `{}` (no uuid) | 400 "uuid is required" |
-| 16 | `GET /api/tasks/create` | Wrong method | 405 "method not allowed" |
+| 17 | `POST /api/tasks/create` | `{}` (no title) | 400 "title is required" |
+| 18 | `POST /api/tasks/complete` | `{}` (no uuid) | 400 "uuid is required" |
+| 19 | `GET /api/tasks/create` | Wrong method | 405 "method not allowed" |
 
 ---
 
 ## 5. MCP Protocol (`test-mcp-protocol.sh`)
 
-**Status: Implemented — 11/11 passing**
+**Status: Implemented — 12/12 passing**
 
 Tests the JSON-RPC protocol layer independently from tool logic.
 
@@ -261,26 +267,27 @@ Tests the JSON-RPC protocol layer independently from tool logic.
 | # | Check |
 |---|-------|
 | 1 | Server name is "Things Cloud" |
-| 2 | Server version is "1.0.0" |
+| 2 | Server version is "1.1.0" |
 | 3 | Capabilities include tools |
 
 ### List tools
 
 | # | Check |
 |---|-------|
-| 4 | Returns 33 tools |
+| 4 | Returns 36 tools |
 | 5 | Includes `things_create_task` |
 | 6 | Includes `things_list_today` |
-| 7 | Includes `things_create_heading` |
-| 8 | All tools have `inputSchema` |
+| 7 | Includes `things_list_upcoming` |
+| 8 | Includes `things_create_heading` |
+| 9 | All tools have `inputSchema` |
 
 ### Error handling
 
 | # | Check |
 |---|-------|
-| 9 | Unknown tool name returns error |
-| 10 | Missing required `title` param returns error |
-| 11 | Missing required `uuid` param returns error |
+| 10 | Unknown tool name returns error |
+| 11 | Missing required `title` param returns error |
+| 12 | Missing required `uuid` param returns error |
 
 ---
 

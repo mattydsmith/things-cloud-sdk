@@ -98,14 +98,29 @@ echo "--- things_list_inbox ---"
 INBOX=$(mcp_call "things_list_inbox" "{}" | extract_text)
 check "returns array" "$(is_array "$INBOX")" "true"
 
-# 3. List all tasks
+# 3. List anytime
+echo "--- things_list_anytime ---"
+ANYTIME=$(mcp_call "things_list_anytime" "{}" | extract_text)
+check "returns array" "$(is_array "$ANYTIME")" "true"
+
+# 4. List someday
+echo "--- things_list_someday ---"
+SOMEDAY=$(mcp_call "things_list_someday" "{}" | extract_text)
+check "returns array" "$(is_array "$SOMEDAY")" "true"
+
+# 5. List upcoming
+echo "--- things_list_upcoming ---"
+UPCOMING=$(mcp_call "things_list_upcoming" "{}" | extract_text)
+check "returns array" "$(is_array "$UPCOMING")" "true"
+
+# 6. List all tasks
 echo "--- things_list_all_tasks ---"
 ALL=$(mcp_call "things_list_all_tasks" "{}" | extract_text)
 check "returns array" "$(is_array "$ALL")" "true"
 FIRST_TASK_UUID=$(first_uuid "$ALL")
 check "has tasks" "$([ -n "$FIRST_TASK_UUID" ] && echo ok || echo '')" "ok"
 
-# 4. List projects
+# 7. List projects
 echo "--- things_list_projects ---"
 PROJECTS=$(mcp_call "things_list_projects" "{}" | extract_text)
 check "returns array" "$(is_array "$PROJECTS")" "true"
@@ -113,7 +128,7 @@ check "items have uuid" "$(has_field "$PROJECTS" uuid)" "true"
 check "items have title" "$(has_field "$PROJECTS" title)" "true"
 FIRST_PROJECT_UUID=$(first_uuid "$PROJECTS")
 
-# 5. List areas
+# 8. List areas
 echo "--- things_list_areas ---"
 AREAS=$(mcp_call "things_list_areas" "{}" | extract_text)
 check "returns array" "$(is_array "$AREAS")" "true"
@@ -121,7 +136,7 @@ check "items have uuid" "$(has_field "$AREAS" uuid)" "true"
 check "items have title" "$(has_field "$AREAS" title)" "true"
 FIRST_AREA_UUID=$(first_uuid "$AREAS")
 
-# 6. List tags
+# 9. List tags
 echo "--- things_list_tags ---"
 TAGS=$(mcp_call "things_list_tags" "{}" | extract_text)
 check "returns array" "$(is_array "$TAGS")" "true"

@@ -161,12 +161,7 @@ func (st *State) TasksInInbox(opts QueryOpts) ([]*things.Task, error) {
 // schedule=1 (started/anytime) AND either sr (scheduled_date) or tir
 // (today_index_ref) falls on today's date.
 func (st *State) TasksInToday(opts QueryOpts) ([]*things.Task, error) {
-	nowUTC := time.Now().UTC()
-	today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
-	tomorrow := today.Add(24 * time.Hour)
-
-	todayUnix := today.Unix()
-	tomorrowUnix := tomorrow.Unix()
+	todayUnix, tomorrowUnix := currentUTCDayBounds()
 
 	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 1
 		AND (
@@ -192,6 +187,73 @@ func (st *State) TasksInToday(opts QueryOpts) ([]*things.Task, error) {
 	}
 	defer rows.Close()
 	return st.scanTaskUUIDs(rows)
+}
+
+// TasksInAnytime returns tasks in the Anytime view. A task appears in Anytime
+// when schedule=1 and it is not classified into Today for the current UTC day.
+func (st *State) TasksInAnytime(opts QueryOpts) ([]*things.Task, error) {
+	todayUnix, tomorrowUnix := currentUTCDayBounds()
+
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 1
+		AND NOT (
+			(scheduled_date IS NOT NULL AND scheduled_date >= ? AND scheduled_date < ?)
+			OR (today_index_ref IS NOT NULL AND today_index_ref >= ? AND today_index_ref < ?)
+		) AND deleted = 0`
+	args := []any{todayUnix, tomorrowUnix, todayUnix, tomorrowUnix}
+	if !opts.IncludeCompleted {
+		query += " AND status != 3"
+	}
+	if !opts.IncludeTrashed {
+		query += " AND in_trash = 0"
+	}
+	query += ` ORDER BY "index"`
+	query, args = paginateQuery(query, args, opts)
+	return st.queryTasks(query, args...)
+}
+
+// TasksInSomeday returns tasks in the Someday view. A task appears in Someday
+// when schedule=2 and it is not classified into Upcoming at the current time.
+func (st *State) TasksInSomeday(opts QueryOpts) ([]*things.Task, error) {
+	nowUnix := currentUTCUnix()
+
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 2
+		AND NOT (
+			(scheduled_date IS NOT NULL AND scheduled_date > ?)
+			OR (today_index_ref IS NOT NULL AND today_index_ref > ?)
+		) AND deleted = 0`
+	args := []any{nowUnix, nowUnix}
+	if !opts.IncludeCompleted {
+		query += " AND status != 3"
+	}
+	if !opts.IncludeTrashed {
+		query += " AND in_trash = 0"
+	}
+	query += ` ORDER BY "index"`
+	query, args = paginateQuery(query, args, opts)
+	return st.queryTasks(query, args...)
+}
+
+// TasksInUpcoming returns tasks in the Upcoming view. A task appears in
+// Upcoming when schedule=2 and either sr (scheduled_date) or tir
+// (today_index_ref) is in the future.
+func (st *State) TasksInUpcoming(opts QueryOpts) ([]*things.Task, error) {
+	nowUnix := currentUTCUnix()
+
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 2
+		AND (
+			(scheduled_date IS NOT NULL AND scheduled_date > ?)
+			OR (today_index_ref IS NOT NULL AND today_index_ref > ?)
+		) AND deleted = 0`
+	args := []any{nowUnix, nowUnix}
+	if !opts.IncludeCompleted {
+		query += " AND status != 3"
+	}
+	if !opts.IncludeTrashed {
+		query += " AND in_trash = 0"
+	}
+	query += ` ORDER BY COALESCE(scheduled_date, today_index_ref), "index"`
+	query, args = paginateQuery(query, args, opts)
+	return st.queryTasks(query, args...)
 }
 
 // TasksInProject returns tasks belonging to a project
@@ -309,6 +371,17 @@ func (st *State) ChecklistItems(taskUUID string) ([]*things.CheckListItem, error
 }
 
 // Helper methods
+
+func currentUTCDayBounds() (int64, int64) {
+	nowUTC := time.Now().UTC()
+	today := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+	tomorrow := today.Add(24 * time.Hour)
+	return today.Unix(), tomorrow.Unix()
+}
+
+func currentUTCUnix() int64 {
+	return time.Now().UTC().Unix()
+}
 
 func paginateQuery(query string, args []any, opts QueryOpts) (string, []any) {
 	if opts.Limit > 0 {

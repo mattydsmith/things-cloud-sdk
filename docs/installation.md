@@ -104,9 +104,9 @@ Add the server to your Claude Code MCP config (`~/.claude/mcp.json` or project-l
 
 ## 5. Available tools
 
-Once connected, Claude has access to 33 tools:
+Once connected, Claude has access to 36 tools:
 
-**Read** — List tasks by view (today, inbox, all), by project, by area. Get individual tasks, areas, tags. List completed tasks with date filters. List checklist items.
+**Read** — List tasks by view (today, inbox, anytime, someday, upcoming, all), by project, by area. Get individual tasks, areas, tags. List completed tasks with date filters. List checklist items.
 
 **Write** — Create tasks, projects, areas, tags, headings, and checklist items. Edit tasks (title, notes, dates, project, area, tags, recurrence). Complete, uncomplete, trash, and restore tasks.
 

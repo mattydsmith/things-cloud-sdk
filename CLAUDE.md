@@ -47,7 +47,7 @@ The `sync` package provides a persistent sync engine that:
 
 Key types:
 - **`Syncer`** — Main sync controller with `Sync()`, `State()`, `ChangesSince()` methods
-- **`State`** — Query interface: `TasksInInbox()`, `TasksInToday()`, `AllTasks()`, etc.
+- **`State`** — Query interface: `TasksInInbox()`, `TasksInToday()`, `TasksInAnytime()`, `TasksInSomeday()`, `TasksInUpcoming()`, `AllTasks()`, etc.
 - **`Change`** — Interface for semantic changes with `ChangeType()`, `EntityUUID()`, `Timestamp()`
 
 ### State Aggregation (`state/memory`)
