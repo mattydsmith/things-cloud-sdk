@@ -9,7 +9,7 @@ Built on a reverse-engineered, unofficial SDK — there is no official API docum
 The server syncs your Things Cloud data into a local SQLite database and exposes it through two interfaces:
 
 - **MCP Endpoint** (`/mcp`) — [Model Context Protocol](https://modelcontextprotocol.io/) for AI assistants like Claude
-- **REST API** (`/api/*`) — Bearer token auth, for scripts and apps
+- **REST API** (`/api/*`) — JSON HTTP API for scripts and apps, with optional `API_KEY` auth
 
 Changes you make in the Things app show up immediately. Tasks Claude creates appear in Things within seconds. No restart required.
 The server performs an initial sync at startup and now exits if it cannot establish a clean local snapshot.
@@ -165,15 +165,31 @@ Your credentials are stored as encrypted secrets on your own Fly.io account — 
 
 Since this uses the Things Cloud sync protocol directly, consider creating a separate Things Cloud account to experiment with before pointing it at your main account.
 
+For a concrete `prod`/`dev` split with separate Fly apps, separate Things accounts, and separate Claude connectors, see **[docs/deployments.md](docs/deployments.md)**.
+
 ## Skills
 
 The MCP server gives Claude the ability to interact with Things, but to get the most out of it you need a **Claude Skill file** — a small instruction file that teaches Claude your specific projects, tags, and workflows.
 
 See **[docs/skills.md](docs/skills.md)** for a step-by-step guide to creating your own.
 
-## REST API
+## Auth
 
-All `/api/*` endpoints require `Authorization: Bearer <API_KEY>` when `API_KEY` is set.
+Current stable behavior is:
+
+- `/mcp` is open, which is why Claude.ai web and Claude Code can connect with just the MCP URL
+- `/api/*` can be optionally protected with `API_KEY`
+- if `API_KEY` is unset, the REST API is open too
+
+If you want static auth today, it applies only to the REST API:
+
+- set `API_KEY`
+- send `Authorization: Bearer <API_KEY>` on `/api/*`
+- leave your Claude connector pointed at the same unauthenticated `/mcp` URL
+
+`AUTH_SECRET` and OAuth belong to the planned web UI and future MCP-hardening work, not the current stable server behavior.
+
+## REST API
 
 See **[docs/endpoints-and-things-cloud.md](docs/endpoints-and-things-cloud.md)** for how the REST and MCP surfaces sync from Things Cloud history, answer reads from the local SQLite mirror, and commit writes back to the cloud.
 
@@ -207,15 +223,17 @@ The underlying Go SDK can be used directly as a library. See **[docs/sdk.md](doc
 
 ## Testing
 
-113 integration tests across 5 test suites:
+Live integration coverage across 5 shell test suites:
 
 ```bash
-./tests/test-smoke.sh          # Core read/write workflow (11 checks)
-./tests/test-mcp.sh 010        # All MCP write tools (44 checks)
-./tests/test-mcp-read.sh       # All MCP read tools (29 checks)
-./tests/test-mcp-protocol.sh   # JSON-RPC handshake and error handling (11 checks)
-API_KEY=your-key ./tests/test-api.sh  # All REST endpoints (18 checks)
+./tests/test-smoke.sh
+./tests/test-mcp.sh 010
+./tests/test-mcp-read.sh
+./tests/test-mcp-protocol.sh
+./tests/test-api.sh https://things-cloud-mttsmth.fly.dev your-token
 ```
+
+The first four suites work against the current authless MCP setup. `test-api.sh` is specifically for deployments where you have set `API_KEY` on `/api/*`. For multi-environment testing, pass the base URL explicitly so you do not hit production by accident. See **[docs/deployments.md](docs/deployments.md)**.
 
 ## Local development
 

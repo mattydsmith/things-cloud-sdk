@@ -93,10 +93,10 @@ The frontend SPA is built with Vite, then embedded into the Go server binary usi
 3. User enters `AUTH_SECRET` value → POST to `/api/auth/login`
 4. Server validates, returns HTTP-only secure cookie (HMAC-signed, stateless)
 5. All subsequent API calls include cookie automatically (same-origin)
-6. API still accepts `Authorization: Bearer <AUTH_SECRET>` for CLI/MCP clients
-7. MCP endpoint (`/mcp`) validates `Authorization: Bearer <AUTH_SECRET>` — same token as the REST API (**not yet implemented**)
-8. When `AUTH_SECRET` is unset, no auth required on any endpoint (current behaviour preserved)
-9. Backwards compatible: the server currently uses `API_KEY` for REST auth. Existing users who already have `API_KEY` set won't need a new secret — we'll support both `AUTH_SECRET` and `API_KEY` (checking `AUTH_SECRET` first, falling back to `API_KEY`)
+6. Browser API calls use the session cookie automatically (same-origin)
+7. Optional REST bearer auth can continue to exist for scripts during transition
+8. MCP endpoint (`/mcp`) stays unauthenticated for Claude.ai compatibility; protecting it is a separate OAuth project
+9. Backwards compatible: the current stable server uses `API_KEY` only for `/api/*`. The web UI can introduce `AUTH_SECRET` for browser login while continuing to accept `API_KEY` as a legacy fallback
 
 ## API Gaps to Fill
 
@@ -106,7 +106,6 @@ The existing REST API covers most needs but is missing a few endpoints the web U
 |----------|--------|---------|--------|
 | `/api/auth/login` | POST | Cookie-based login | **New** |
 | `/api/auth/logout` | POST | Clear session cookie | **New** |
-| `/mcp` | — | Add `Authorization: Bearer <AUTH_SECRET>` validation | **TODO** (currently unauthenticated) |
 | `/api/tasks/search` | GET | Search by title/note | **New** (exists in MCP) |
 | `/api/tasks/:uuid` | GET | Get single task | **New** (exists in MCP) |
 | `/api/tasks/:uuid/checklist` | GET | Get checklist items | **New** (exists in MCP) |
@@ -137,8 +136,7 @@ Most "new" endpoints already exist as MCP tools — they just need REST wrappers
 
 1. Add new REST endpoints (move-to-today, uncomplete, search, single task/area, checklist)
 2. Add `/api/auth/login` and `/api/auth/logout` with cookie session
-3. Add `Authorization: Bearer <AUTH_SECRET>` auth to the `/mcp` endpoint (same middleware as `/api/*`)
-4. Add `WEB_UI` env var gate
+3. Add `WEB_UI` env var gate
 4. Add `go:embed` scaffold for serving static files from `web/dist/`
 5. Update health check: when `WEB_UI=true`, move from `/` to `/api/health`
 
@@ -249,12 +247,12 @@ In the Fly.io dashboard for your app, go to **Secrets** and add these values:
 |------|-------|-------------|
 | `THINGS_USERNAME` | Your Things Cloud email (e.g. `you@email.com`) | The email you use to sign in to Things on your Mac or iPhone. This lets the server sync your tasks. |
 | `THINGS_PASSWORD` | Your Things Cloud password | The password for your Things account. Stored encrypted on your server — nobody else can see it. |
-| `AUTH_SECRET` | Any password you choose | Protects your server. You'll use this to sign in to the web UI and to connect Claude. Can be any word or phrase. |
+| `AUTH_SECRET` | Any password you choose | Signs you into the web UI and can back authenticated browser/API flows. It does not protect Claude.ai's MCP connection. |
 | `WEB_UI` | `true` | Enables the Ting web interface so you can access your tasks from a browser. |
 
-> **`AUTH_SECRET` is strongly recommended.** Without it, anyone who finds your server URL can access your tasks. It protects both the web UI and the Claude connection.
+> **`AUTH_SECRET` is recommended for the web UI itself.** It gives the browser UI a real sign-in instead of leaving the UI open.
 >
-> **`WEB_UI` is optional.** If you only want to use Claude to manage your tasks (no browser interface), you can skip it. You should still set `AUTH_SECRET`.
+> **Claude.ai still connects to `/mcp` without auth.** Protecting remote MCP properly is a separate OAuth project, not part of this web UI rollout.
 
 ### Step 6 — Deploy
 
@@ -262,7 +260,7 @@ In the Fly.io dashboard for your app, go to **Secrets** and add these values:
 2. Wait 2–3 minutes for the build to complete
 3. When it's done, Fly.io will show you your app's URL — something like `https://your-app-name.fly.dev`
 4. Open that URL in your browser
-5. Enter the `AUTH_SECRET` you chose → you're in
+5. If you set `AUTH_SECRET`, enter it to sign in; otherwise the web UI opens directly
 
 ### Step 7 — Connect Claude to your MCP server
 
@@ -273,8 +271,7 @@ The server also works as an MCP (Model Context Protocol) server, which lets Clau
 1. Open [claude.ai](https://claude.ai) and sign in
 2. Go to **Settings > Connectors > Add custom connector**
 3. Set the URL to: `https://your-app-name.fly.dev/mcp` (replace `your-app-name` with the name Fly.io gave your app)
-4. In the authentication field, enter the `AUTH_SECRET` password you chose in Step 5
-5. Click **Save**
+4. Click **Save**
 
 Now you can ask Claude things like *"What's on my Things today?"* or *"Add a task to buy milk"*.
 
@@ -287,16 +284,13 @@ If you use Claude Code in the terminal, add this to your MCP config file (`~/.cl
   "mcpServers": {
     "things": {
       "type": "url",
-      "url": "https://your-app-name.fly.dev/mcp",
-      "headers": {
-        "Authorization": "Bearer your-auth-secret-here"
-      }
+      "url": "https://your-app-name.fly.dev/mcp"
     }
   }
 }
 ```
 
-Replace `your-app-name` with the name Fly.io gave your app, and `your-auth-secret-here` with the `AUTH_SECRET` password you chose in Step 5.
+Replace `your-app-name` with the name Fly.io gave your app.
 
 ### Step 8 — Create a Skill
 
@@ -432,9 +426,11 @@ If you already have the MCP server running on Fly.io, here's what changes and wh
 
 #### What's changing
 
-- **Better security** — Previously, the connection between Claude and your server was unprotected. After this update, it uses your `API_KEY` password to secure it. This means anyone who doesn't have your password can't access your tasks.
+- **Web UI sign-in** — The browser UI will use a password-style login backed by `AUTH_SECRET` or `API_KEY`.
 - **`API_KEY` is being renamed to `AUTH_SECRET`** — It does the same thing, the name is just clearer. Your existing `API_KEY` will continue to work — you don't need to change it right away.
 - **New optional feature: web UI** — You can now access your tasks from a browser. Set `WEB_UI=true` to turn it on.
+
+> Important: Claude.ai web custom connectors currently rely on the MCP endpoint staying open. Protecting `/mcp` properly will require OAuth, which is a separate project from the web UI rollout.
 
 #### If you already have `API_KEY` set
 
@@ -442,43 +438,20 @@ Most existing users will have set an `API_KEY` when they first installed the ser
 
 1. **Update your fork** — Go to your fork on GitHub, click **"Sync fork"** → **"Update branch"**, and redeploy (or let Auto Deploy handle it).
 
-2. **Update your Claude connection** — After redeploying, Claude needs to send your password when connecting. The steps depend on how you use Claude:
-
-   **Claude.ai (web):**
-   1. Go to **Settings > Connectors**
-   2. Find your Things connector and edit it
-   3. In the authentication field, enter your `API_KEY` value (the same password you chose when you set up the server)
-   4. Save
-
-   **Claude Code (CLI):**
-   Open your MCP config file (`~/.claude/mcp.json`) and add your password to the `headers` section:
-   ```json
-   {
-     "mcpServers": {
-       "things": {
-         "type": "url",
-         "url": "https://your-app-name.fly.dev/mcp",
-         "headers": {
-           "Authorization": "Bearer your-api-key-here"
-         }
-       }
-     }
-   }
-   ```
-   Replace `your-api-key-here` with the `API_KEY` password you chose when you set up the server.
+2. **Keep Claude.ai and Claude Code on the same open MCP URL** — the web UI rollout should not require a bearer token on `/mcp`. Existing Claude connectors should continue using `https://your-app-name.fly.dev/mcp` with no auth fields or headers.
 
 3. **Optionally enable the web UI** — If you want to access your tasks from a browser, go to **Secrets** in the Fly.io dashboard and add `WEB_UI` with the value `true`. You'll sign in to the web UI using the same password.
 
-4. **Optionally rename API_KEY** — If you'd like to use the new name, go to **Secrets** in the Fly.io dashboard, add `AUTH_SECRET` with the same value as your `API_KEY`, then remove `API_KEY`. This is purely cosmetic — both names work.
+4. **Optionally rename API_KEY** — If you'd like to use the new name for the web UI login and Claude Code, go to **Secrets** in the Fly.io dashboard, add `AUTH_SECRET` with the same value as your `API_KEY`, then remove `API_KEY`. This is purely cosmetic — both names work.
 
 #### If you never set an `API_KEY`
 
-If you skipped setting a password when you first installed, your server is currently unprotected — anyone who finds your URL can access your tasks. You should fix this:
+If you skipped setting a password when you first installed, your server is currently unprotected. For the web UI, you'll still want a password for browser login, but Claude connectors should continue using the same open `/mcp` URL.
 
 1. In the Fly.io dashboard, go to **Secrets**
 2. Add `AUTH_SECRET` — choose any password you'll remember
 3. Redeploy
-4. Update your Claude connection to include the password (see step 2 above)
+4. Use that password for the web UI login and for Claude Code if needed
 
 ---
 
