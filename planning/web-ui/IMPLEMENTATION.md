@@ -100,21 +100,57 @@ The frontend SPA is built with Vite, then embedded into the Go server binary usi
 
 ## API Gaps to Fill
 
-The existing REST API covers most needs but is missing a few endpoints the web UI requires:
+The server already has a useful REST surface today:
+
+- list views: `/api/tasks/inbox`, `/today`, `/anytime`, `/someday`, `/upcoming`
+- metadata lists: `/api/projects`, `/api/areas`, `/api/tags`
+- core writes: `/api/tasks/create`, `/edit`, `/complete`, `/trash`
+
+So this phase is not "build a REST API from scratch". It is "add the small number of extra routes the web UI needs beyond the REST surface that already exists".
+
+### Required for the first UI slice
+
+These endpoints support the first real browser slice: login, shell, Today, Inbox, and a task detail panel.
 
 | Endpoint | Method | Purpose | Status |
 |----------|--------|---------|--------|
 | `/api/auth/login` | POST | Cookie-based login | **New** |
 | `/api/auth/logout` | POST | Clear session cookie | **New** |
+| `/api/auth/session` | GET | Check whether the browser is signed in | **New** |
+| `/api/tasks/:uuid` | GET | Get single task for detail panel | **New** (exists in MCP/internal state) |
+| `/api/tasks/:uuid/checklist` | GET | Get checklist items for detail panel | **New** (exists in MCP/internal state) |
+| `/api/tasks/move-to-today` | POST | Inbox/detail-panel triage action | **New** (exists in MCP/write helpers) |
+| `/api/tasks/move-to-anytime` | POST | Inbox/detail-panel triage action | **New** (exists in MCP/write helpers) |
+
+### Needed for later project and area views
+
+These are not blockers for the first browser slice.
+
+| Endpoint | Method | Purpose | Status |
+|----------|--------|---------|--------|
+| `/api/areas/:uuid` | GET | Get single area | **New** (exists in MCP/internal state) |
+| `/api/areas/:uuid/tasks` | GET | Tasks in area | **New** (exists in MCP/internal state) |
+| `/api/projects/:uuid/tasks` | GET | Tasks in project | **New** (exists in MCP/internal state) |
+
+### Explicitly deferred
+
+These are useful, but they are not required to get the first usable web UI shipped.
+
+| Endpoint | Method | Purpose | Status |
+|----------|--------|---------|--------|
 | `/api/tasks/search` | GET | Search by title/note | **New** (exists in MCP) |
-| `/api/tasks/:uuid` | GET | Get single task | **New** (exists in MCP) |
-| `/api/tasks/:uuid/checklist` | GET | Get checklist items | **New** (exists in MCP) |
-| `/api/tasks/move-to-today` | POST | Set task to Today | **New** (exists in MCP) |
-| `/api/tasks/move-to-anytime` | POST | Remove from Today | **New** (exists in MCP) |
 | `/api/tasks/uncomplete` | POST | Uncomplete task | **New** (exists in MCP) |
-| `/api/areas/:uuid` | GET | Get single area | **New** (exists in MCP) |
-| `/api/areas/:uuid/tasks` | GET | Tasks in area | **New** (exists in MCP) |
-| `/api/projects/:uuid/tasks` | GET | Tasks in project | **New** (exists in MCP) |
+| `/api/checklist-items/create` | POST | Add checklist item | **New** (exists in MCP/write helpers) |
+| `/api/checklist-items/complete` | POST | Complete checklist item | **New** (exists in MCP/write helpers) |
+| `/api/checklist-items/uncomplete` | POST | Uncomplete checklist item | **New** (exists in MCP/write helpers) |
+| `/api/checklist-items/delete` | POST | Delete checklist item | **New** (exists in MCP/write helpers) |
+
+### Already covered by REST today
+
+These do not need new backend work:
+
+| Endpoint | Method | Purpose | Status |
+|----------|--------|---------|--------|
 | `/api/tasks/inbox` | GET | Inbox tasks | Exists |
 | `/api/tasks/today` | GET | Today tasks | Exists |
 | `/api/tasks/anytime` | GET | Anytime tasks | Exists |
@@ -128,55 +164,63 @@ The existing REST API covers most needs but is missing a few endpoints the web U
 | `/api/tasks/complete` | POST | Complete task | Exists |
 | `/api/tasks/trash` | POST | Trash (delete) task | Exists |
 
-Most "new" endpoints already exist as MCP tools — they just need REST wrappers.
+Most "new" endpoints already exist as MCP tools or internal read/write helpers — they just need small REST wrappers.
 
 ## Implementation Phases
 
-### Phase 1 — Backend Prep
+### Phase 1 — Minimal Backend Slice
 
-1. Add new REST endpoints (move-to-today, uncomplete, search, single task/area, checklist)
-2. Add `/api/auth/login` and `/api/auth/logout` with cookie session
-3. Add `WEB_UI` env var gate
-4. Add `go:embed` scaffold for serving static files from `web/dist/`
-5. Update health check: when `WEB_UI=true`, move from `/` to `/api/health`
+1. Add `/api/auth/login`, `/api/auth/logout`, and `/api/auth/session`
+2. Add `GET /api/tasks/:uuid` and `GET /api/tasks/:uuid/checklist`
+3. Add `POST /api/tasks/move-to-today` and `POST /api/tasks/move-to-anytime`
+4. Add `WEB_UI` env var gate
+5. Add `/api/health` so Fly health checks do not depend on the UI route
 
 ### Phase 2 — Frontend Scaffold
 
 1. `npm create vite@latest web -- --template react-ts`
 2. Install dependencies: `tailwindcss`, `react-router`, `@tanstack/react-query`
 3. Set up Tailwind with our design tokens (colours, fonts, spacing from design spec)
-4. Create layout shell: sidebar + main content area
-5. Create shared components: TaskItem, Checkbox, TagPill, DetailPanel
+4. Add `go:embed` scaffold for serving static files from `web/dist/`
+5. Create layout shell: sidebar + main content area
+6. Create shared components: TaskItem, Checkbox, TagPill, DetailPanel
 
-### Phase 3 — Read-Only Views
+### Phase 3 — First Vertical Slice
 
 1. Login page
-2. Today view (grouped + flat toggle, tag filters)
-3. Inbox view (with triage buttons)
-4. Upcoming view (grouped by date)
-5. Anytime view (grouped by area)
-6. Someday view (with triage buttons)
-7. Project detail view (headings, tag filters, progress)
-8. Area detail view (project cards + loose tasks)
-9. Task detail slide-out panel (shared across all views)
+2. App shell
+3. Today view
+4. Inbox view (with Today / Anytime triage buttons)
+5. Task detail slide-out panel
 
-### Phase 4 — Write Operations
+### Phase 4 — Extended Views and Writes
 
-1. Create task (inline "New task" input)
-2. Complete/uncomplete (checkbox click)
-3. Edit task (title, notes in detail panel)
-4. Today toggle (star button in detail panel)
-5. Assign to project (dropdown in detail panel)
-6. Assign tags (toggle buttons in detail panel)
-7. Add/complete/delete checklist items
-8. Delete task (with confirmation dialog)
+1. Add project and area read endpoints
+2. Upcoming view (grouped by date)
+3. Anytime view (grouped by area)
+4. Someday view (with triage buttons)
+5. Project detail view (headings, tag filters, progress)
+6. Area detail view (project cards + loose tasks)
+7. Create task (inline "New task" input)
+8. Complete/uncomplete where needed
+9. Edit task (title, notes in detail panel)
+10. Assign to project (dropdown in detail panel)
+11. Assign tags (toggle buttons in detail panel)
 
-### Phase 5 — Build & Deploy
+### Phase 5 — Checklist Editing and Nice-to-Haves
+
+1. Add checklist item write endpoints
+2. Add/complete/delete checklist items in the detail panel
+3. Delete task (with confirmation dialog)
+4. Add search only if the UI still needs it after the core views are working
+
+### Phase 6 — Build & Deploy
 
 1. Add Vite build step to Dockerfile
-2. Wire `go:embed` to serve `web/dist/`
-3. Test locally: `WEB_UI=true go run ./server/`
-4. Deploy to Fly.io (see below)
+2. Test locally: `WEB_UI=true go run ./server/`
+3. Deploy to `things-cloud-sdk` first
+4. Validate against the dev Things account
+5. Promote to production
 
 ## Deployment
 
