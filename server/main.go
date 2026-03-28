@@ -270,16 +270,33 @@ func handleTags(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, tags)
 }
 
+func resolveAuthToken() string {
+	if secret := os.Getenv("AUTH_SECRET"); secret != "" {
+		return secret
+	}
+	return os.Getenv("API_KEY")
+}
+
+func hasConfiguredAuthToken() bool {
+	return os.Getenv("AUTH_SECRET") != "" || os.Getenv("API_KEY") != ""
+}
+
+func validateBearerAuth(w http.ResponseWriter, r *http.Request, token string) bool {
+	if r.Header.Get("Authorization") != "Bearer "+token {
+		jsonError(w, "unauthorized", 401)
+		return false
+	}
+	return true
+}
+
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		apiKey := os.Getenv("API_KEY")
-		if apiKey == "" {
+		token := resolveAuthToken()
+		if token == "" {
 			next(w, r)
 			return
 		}
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer "+apiKey {
-			jsonError(w, "unauthorized", 401)
+		if !validateBearerAuth(w, r, token) {
 			return
 		}
 		next(w, r)
@@ -288,13 +305,12 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 func authHandlerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiKey := os.Getenv("API_KEY")
-		if apiKey == "" {
+		token := resolveAuthToken()
+		if token == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if r.Header.Get("Authorization") != "Bearer "+apiKey {
-			jsonError(w, "unauthorized", 401)
+		if !validateBearerAuth(w, r, token) {
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -308,14 +324,12 @@ func debugAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		apiKey := os.Getenv("API_KEY")
-		if apiKey == "" {
-			jsonError(w, "debug endpoints require API_KEY", 503)
+		if !hasConfiguredAuthToken() {
+			jsonError(w, "debug endpoints require AUTH_SECRET or API_KEY", 503)
 			return
 		}
 
-		if r.Header.Get("Authorization") != "Bearer "+apiKey {
-			jsonError(w, "unauthorized", 401)
+		if !validateBearerAuth(w, r, resolveAuthToken()) {
 			return
 		}
 
@@ -556,8 +570,7 @@ func main() {
 		})
 	}))
 
-	// MCP endpoint (no bearer auth — claude.ai connectors use OAuth which we don't implement)
-	http.Handle("/mcp", newMCPHandler())
+	http.Handle("/mcp", authHandlerMiddleware(newMCPHandler()))
 
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

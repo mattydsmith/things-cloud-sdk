@@ -2,11 +2,12 @@
 set -euo pipefail
 
 # MCP integration test — exercises all write tools with a named test cycle.
-# Usage: ./test-mcp.sh [cycle_name] [base_url]
-# Example: ./test-mcp.sh 001 https://things-cloud-mttsmth.fly.dev
+# Usage: ./test-mcp.sh [cycle_name] [base_url] [auth_token]
+# Example: ./test-mcp.sh 001 https://things-cloud-mttsmth.fly.dev your-auth-token
 
 CYCLE="${1:-001}"
 BASE="${2:-https://things-cloud-mttsmth.fly.dev}"
+AUTH_TOKEN="${3:-${AUTH_TOKEN:-${AUTH_SECRET:-${API_KEY:-}}}}"
 PREFIX="[test-${CYCLE}]"
 ENDPOINT="${BASE}/mcp"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -24,10 +25,16 @@ CREATED_TAG=""
 
 mcp_call() {
   local tool="$1" args="$2"
+  local curl_args=(
+    -s --max-time 60 "${ENDPOINT}"
+    -X POST
+    -H "Content-Type: application/json"
+  )
+  if [ -n "$AUTH_TOKEN" ]; then
+    curl_args+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
+  fi
   sleep 1  # avoid Things Cloud 429 rate limiting
-  curl -s --max-time 60 "${ENDPOINT}" \
-    -X POST \
-    -H "Content-Type: application/json" \
+  curl "${curl_args[@]}" \
     --data-raw "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"${tool}\",\"arguments\":${args}}}"
 }
 

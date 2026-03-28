@@ -2,20 +2,20 @@
 set -euo pipefail
 
 # REST API endpoint tests — verifies /api/* endpoints with auth.
-# Usage: ./test-api.sh [base_url] [api_key]
-# The api_key can also be set via API_KEY env var.
+# Usage: ./test-api.sh [base_url] [auth_token]
+# The auth token can also be set via AUTH_TOKEN, AUTH_SECRET, or API_KEY env vars.
 
 BASE="${1:-https://things-cloud-mttsmth.fly.dev}"
-API_KEY="${2:-${API_KEY:-}}"
+AUTH_TOKEN="${2:-${AUTH_TOKEN:-${AUTH_SECRET:-${API_KEY:-}}}}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/test-results.log"
 
-if [ -z "$API_KEY" ]; then
-  echo "Error: API_KEY is required. Pass as second arg or set API_KEY env var."
+if [ -z "$AUTH_TOKEN" ]; then
+  echo "Error: auth token is required. Pass as second arg or set AUTH_TOKEN, AUTH_SECRET, or API_KEY."
   exit 1
 fi
 
-AUTH_HEADER="Authorization: Bearer ${API_KEY}"
+AUTH_HEADER="Authorization: Bearer ${AUTH_TOKEN}"
 
 PASS=0
 FAIL=0

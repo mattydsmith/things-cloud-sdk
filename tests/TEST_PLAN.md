@@ -4,15 +4,17 @@
 
 All tests live in the `tests/` directory and run against the live deployed service at `https://things-cloud-mttsmth.fly.dev`. All tests use real Things Cloud sync — there are no mocks. A 1-second delay between calls avoids Things Cloud 429 rate limiting.
 
+MCP scripts accept an optional bearer token as a positional argument or via `AUTH_TOKEN`, `AUTH_SECRET`, or `API_KEY`. When the server is protected, that token is required for `/mcp`.
+
 ## Test Scripts
 
 | Script | Scope | Usage |
 |--------|-------|-------|
-| `test-smoke.sh` | Daily smoke test — core workflow | `./test-smoke.sh [base_url]` |
-| `test-mcp.sh` | MCP write tools + read verification | `./test-mcp.sh [cycle] [base_url]` |
-| `test-mcp-read.sh` | MCP read-only tools | `./test-mcp-read.sh [base_url]` |
-| `test-mcp-protocol.sh` | MCP JSON-RPC protocol | `./test-mcp-protocol.sh [base_url]` |
-| `test-api.sh` | REST API endpoints | `./test-api.sh [base_url] [api_key]` |
+| `test-smoke.sh` | Daily smoke test — core workflow | `./test-smoke.sh [base_url] [auth_token]` |
+| `test-mcp.sh` | MCP write tools + read verification | `./test-mcp.sh [cycle] [base_url] [auth_token]` |
+| `test-mcp-read.sh` | MCP read-only tools | `./test-mcp-read.sh [base_url] [auth_token]` |
+| `test-mcp-protocol.sh` | MCP JSON-RPC protocol | `./test-mcp-protocol.sh [base_url] [auth_token]` |
+| `test-api.sh` | REST API endpoints | `./test-api.sh [base_url] [auth_token]` |
 
 Each script exits with code 0 on success, 1 on any failure.
 
@@ -213,7 +215,7 @@ These tests verify all read-only MCP tools return valid responses. They don't cr
 
 **Status: Implemented — 21/21 passing**
 
-Tests the `/api/*` endpoints which require Bearer token auth. Pass API key as second arg or via `API_KEY` env var.
+Tests the `/api/*` endpoints which require Bearer token auth when `AUTH_SECRET` or `API_KEY` is configured. Pass the auth token as the second arg or via `AUTH_TOKEN`, `AUTH_SECRET`, or `API_KEY`.
 
 ### Health & Auth
 
@@ -258,7 +260,7 @@ Tests the `/api/*` endpoints which require Bearer token auth. Pass API key as se
 
 ## 5. MCP Protocol (`test-mcp-protocol.sh`)
 
-**Status: Implemented — 12/12 passing**
+**Status: Implemented — 12 core checks, plus auth checks when an auth token is provided**
 
 Tests the JSON-RPC protocol layer independently from tool logic.
 
@@ -288,6 +290,13 @@ Tests the JSON-RPC protocol layer independently from tool logic.
 | 10 | Unknown tool name returns error |
 | 11 | Missing required `title` param returns error |
 | 12 | Missing required `uuid` param returns error |
+
+### Auth gating (when `AUTH_TOKEN` is supplied)
+
+| # | Check |
+|---|-------|
+| 13 | Missing auth returns 401 |
+| 14 | Wrong auth returns 401 |
 
 ---
 

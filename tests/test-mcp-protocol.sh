@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # MCP protocol-level tests — verifies JSON-RPC handshake and error handling.
-# Usage: ./test-mcp-protocol.sh [base_url]
+# Usage: ./test-mcp-protocol.sh [base_url] [auth_token]
 
 BASE="${1:-https://things-cloud-mttsmth.fly.dev}"
+AUTH_TOKEN="${2:-${AUTH_TOKEN:-${AUTH_SECRET:-${API_KEY:-}}}}"
 ENDPOINT="${BASE}/mcp"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/test-results.log"
@@ -16,12 +17,31 @@ FAILURES=""
 # --- helpers ---
 
 mcp_raw() {
-  local body="$1"
+  local body="$1" token="${2:-$AUTH_TOKEN}"
+  local curl_args=(
+    -s --max-time 30 "${ENDPOINT}"
+    -X POST
+    -H "Content-Type: application/json"
+  )
+  if [ -n "$token" ]; then
+    curl_args+=(-H "Authorization: Bearer ${token}")
+  fi
   sleep 1
-  curl -s --max-time 30 "${ENDPOINT}" \
-    -X POST \
-    -H "Content-Type: application/json" \
-    --data-raw "$body"
+  curl "${curl_args[@]}" --data-raw "$body"
+}
+
+mcp_status() {
+  local body="$1" token="${2:-}"
+  local curl_args=(
+    -s --max-time 30 -o /dev/null -w "%{http_code}" "${ENDPOINT}"
+    -X POST
+    -H "Content-Type: application/json"
+  )
+  if [ -n "$token" ]; then
+    curl_args+=(-H "Authorization: Bearer ${token}")
+  fi
+  sleep 1
+  curl "${curl_args[@]}" --data-raw "$body"
 }
 
 check() {
@@ -45,7 +65,13 @@ echo ""
 
 # 1. Initialize
 echo "--- Initialize ---"
-RESP=$(mcp_raw '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}')
+INIT_BODY='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+if [ -n "$AUTH_TOKEN" ]; then
+  echo "--- Auth ---"
+  check "missing auth returns 401" "$(mcp_status "$INIT_BODY")" "401"
+  check "wrong auth returns 401" "$(mcp_status "$INIT_BODY" "wrong-token")" "401"
+fi
+RESP=$(mcp_raw "$INIT_BODY")
 SERVER_NAME=$(echo "$RESP" | python3 -c "import sys,json; r=json.loads(sys.stdin.read()); print(r.get('result',{}).get('serverInfo',{}).get('name',''))" 2>/dev/null || echo "")
 SERVER_VER=$(echo "$RESP" | python3 -c "import sys,json; r=json.loads(sys.stdin.read()); print(r.get('result',{}).get('serverInfo',{}).get('version',''))" 2>/dev/null || echo "")
 HAS_TOOLS=$(echo "$RESP" | python3 -c "import sys,json; r=json.loads(sys.stdin.read()); print('true' if 'tools' in r.get('result',{}).get('capabilities',{}) else 'false')" 2>/dev/null || echo "false")

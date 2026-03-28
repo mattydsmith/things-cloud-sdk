@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # MCP read tool tests — verifies all read-only tools return valid responses.
-# Usage: ./test-mcp-read.sh [base_url]
+# Usage: ./test-mcp-read.sh [base_url] [auth_token]
 
 BASE="${1:-https://things-cloud-mttsmth.fly.dev}"
+AUTH_TOKEN="${2:-${AUTH_TOKEN:-${AUTH_SECRET:-${API_KEY:-}}}}"
 ENDPOINT="${BASE}/mcp"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/test-results.log"
@@ -17,10 +18,16 @@ FAILURES=""
 
 mcp_call() {
   local tool="$1" args="$2"
+  local curl_args=(
+    -s --max-time 60 "${ENDPOINT}"
+    -X POST
+    -H "Content-Type: application/json"
+  )
+  if [ -n "$AUTH_TOKEN" ]; then
+    curl_args+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
+  fi
   sleep 1
-  curl -s --max-time 60 "${ENDPOINT}" \
-    -X POST \
-    -H "Content-Type: application/json" \
+  curl "${curl_args[@]}" \
     --data-raw "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"${tool}\",\"arguments\":${args}}}"
 }
 

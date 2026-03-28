@@ -9,7 +9,7 @@ Built on a reverse-engineered, unofficial SDK — there is no official API docum
 The server syncs your Things Cloud data into a local SQLite database and exposes it through two interfaces:
 
 - **MCP Endpoint** (`/mcp`) — [Model Context Protocol](https://modelcontextprotocol.io/) for AI assistants like Claude
-- **REST API** (`/api/*`) — Bearer token auth, for scripts and apps
+- **REST API** (`/api/*`) — JSON over HTTP for scripts and apps
 
 Changes you make in the Things app show up immediately. Tasks Claude creates appear in Things within seconds. No restart required.
 The server performs an initial sync at startup and now exits if it cannot establish a clean local snapshot.
@@ -171,9 +171,16 @@ The MCP server gives Claude the ability to interact with Things, but to get the 
 
 See **[docs/skills.md](docs/skills.md)** for a step-by-step guide to creating your own.
 
-## REST API
+## Auth
 
-All `/api/*` endpoints require `Authorization: Bearer <API_KEY>` when `API_KEY` is set.
+Set `AUTH_SECRET` to protect both `/api/*` and `/mcp` with `Authorization: Bearer <token>`.
+
+- `AUTH_SECRET` is the preferred token for new deployments
+- `API_KEY` remains supported as a legacy fallback when `AUTH_SECRET` is unset
+- if both are set, `AUTH_SECRET` takes precedence
+- if neither is set, `/api/*` and `/mcp` remain open for backwards compatibility
+
+## REST API
 
 See **[docs/endpoints-and-things-cloud.md](docs/endpoints-and-things-cloud.md)** for how the REST and MCP surfaces sync from Things Cloud history, answer reads from the local SQLite mirror, and commit writes back to the cloud.
 
@@ -207,14 +214,14 @@ The underlying Go SDK can be used directly as a library. See **[docs/sdk.md](doc
 
 ## Testing
 
-113 integration tests across 5 test suites:
+Live integration coverage across 5 shell test suites:
 
 ```bash
-./tests/test-smoke.sh          # Core read/write workflow (11 checks)
-./tests/test-mcp.sh 010        # All MCP write tools (44 checks)
-./tests/test-mcp-read.sh       # All MCP read tools (29 checks)
-./tests/test-mcp-protocol.sh   # JSON-RPC handshake and error handling (11 checks)
-API_KEY=your-key ./tests/test-api.sh  # All REST endpoints (18 checks)
+AUTH_TOKEN=your-secret ./tests/test-smoke.sh
+AUTH_TOKEN=your-secret ./tests/test-mcp.sh 010
+AUTH_TOKEN=your-secret ./tests/test-mcp-read.sh
+AUTH_TOKEN=your-secret ./tests/test-mcp-protocol.sh
+AUTH_TOKEN=your-secret ./tests/test-api.sh
 ```
 
 ## Local development

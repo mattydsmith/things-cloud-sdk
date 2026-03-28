@@ -3,10 +3,11 @@ set -euo pipefail
 
 # Smoke test — core daily workflow: create, read, complete, trash.
 # Designed to run regularly (e.g. daily cron) to detect Things Cloud API changes.
-# Usage: ./test-smoke.sh [base_url]
-# Example: ./test-smoke.sh https://things-cloud-mttsmth.fly.dev
+# Usage: ./test-smoke.sh [base_url] [auth_token]
+# Example: ./test-smoke.sh https://things-cloud-mttsmth.fly.dev your-auth-token
 
 BASE="${1:-https://things-cloud-mttsmth.fly.dev}"
+AUTH_TOKEN="${2:-${AUTH_TOKEN:-${AUTH_SECRET:-${API_KEY:-}}}}"
 ENDPOINT="${BASE}/mcp"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/test-results.log"
@@ -19,10 +20,16 @@ FAILURES=""
 
 mcp_call() {
   local tool="$1" args="$2"
+  local curl_args=(
+    -s --max-time 60 "${ENDPOINT}"
+    -X POST
+    -H "Content-Type: application/json"
+  )
+  if [ -n "$AUTH_TOKEN" ]; then
+    curl_args+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
+  fi
   sleep 1
-  curl -s --max-time 60 "${ENDPOINT}" \
-    -X POST \
-    -H "Content-Type: application/json" \
+  curl "${curl_args[@]}" \
     --data-raw "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"${tool}\",\"arguments\":${args}}}"
 }
 

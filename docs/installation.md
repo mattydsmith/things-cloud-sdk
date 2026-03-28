@@ -55,11 +55,13 @@ When prompted, choose a region close to you. The included `fly.toml` configures 
 fly secrets set THINGS_USERNAME='your-things-email' THINGS_PASSWORD='your-things-password'
 ```
 
-Optionally set an API key for the REST endpoints:
+Set an auth token to protect both MCP and REST (recommended):
 
 ```bash
-fly secrets set API_KEY='your-chosen-api-key'
+fly secrets set AUTH_SECRET='your-chosen-auth-secret'
 ```
+
+Existing deployments can keep using `API_KEY`. If both `AUTH_SECRET` and `API_KEY` are set, `AUTH_SECRET` takes precedence.
 
 ### Deploy
 
@@ -82,7 +84,7 @@ curl https://your-app-name.fly.dev/
 
 1. Go to **Settings > Connectors > Add custom connector**
 2. Set the URL to `https://your-app-name.fly.dev/mcp`
-3. Leave authentication fields empty (the MCP endpoint has no auth)
+3. Enter your `AUTH_SECRET` in the authentication field
 4. Save
 
 Then ask Claude: *"What's on my Things today?"*
@@ -96,7 +98,10 @@ Add the server to your Claude Code MCP config (`~/.claude/mcp.json` or project-l
   "mcpServers": {
     "things": {
       "type": "url",
-      "url": "https://your-app-name.fly.dev/mcp"
+      "url": "https://your-app-name.fly.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer your-auth-secret"
+      }
     }
   }
 }
@@ -123,7 +128,7 @@ Once connected, Claude has access to 36 tools:
 
 ## Privacy and credentials
 
-The server needs your Things Cloud email and password to sync your tasks. Since you're deploying this on your own Fly.io account, your credentials are stored as encrypted secrets on infrastructure you control — they're not shared with anyone. The MCP endpoint itself has no authentication, so consider that anyone with your server URL could access your tasks. If that's a concern, you can set an `API_KEY` and restrict access to the REST API.
+The server needs your Things Cloud email and password to sync your tasks. Since you're deploying this on your own Fly.io account, your credentials are stored as encrypted secrets on infrastructure you control — they're not shared with anyone. Set `AUTH_SECRET` (preferred) or `API_KEY` to protect both the MCP and REST endpoints. If neither is set, the server remains open to anyone who discovers your URL.
 
 ## Cost
 
@@ -135,7 +140,8 @@ Fly.io doesn't bill you if your monthly usage is under $5. The server scales to 
 |----------|----------|-------------|
 | `THINGS_USERNAME` | Yes | Your Things account email |
 | `THINGS_PASSWORD` | Yes | Your Things account password |
-| `API_KEY` | No | Bearer token for REST API endpoints (`/api/*`). If unset, no auth required. |
+| `AUTH_SECRET` | No | Preferred bearer token for both `/api/*` and `/mcp`. |
+| `API_KEY` | No | Legacy fallback bearer token when `AUTH_SECRET` is unset. |
 | `PORT` | No | Server port (default: `8080`) |
 | `DEBUG` | No | Set to `true` for verbose HTTP logging |
 
