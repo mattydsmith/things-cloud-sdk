@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ting — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #FAF9F7;
+    --surface: #F3F1ED;
+    --border: #E5E1DB;
+    --text-primary: #2C2C2C;
+    --text-secondary: #8A8580;
+    --text-tertiary: #B5B0A9;
+    --accent: #C4704B;
+    --accent-hover: #A85A38;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .login-container {
+    width: 100%;
+    max-width: 360px;
+    padding: 0 24px;
+  }
+
+  .logo {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .logo h1 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+
+  .logo p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+    letter-spacing: 0.01em;
+  }
+
+  .form-group {
+    margin-bottom: 24px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    letter-spacing: 0.01em;
+  }
+
+  .form-group input {
+    width: 100%;
+    padding: 12px 16px;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    color: var(--text-primary);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 150ms ease;
+  }
+
+  .form-group input::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .form-group input:focus {
+    border-color: var(--accent);
+  }
+
+  .submit-btn {
+    width: 100%;
+    padding: 12px 24px;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    color: #FFFFFF;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 150ms ease;
+    letter-spacing: -0.005em;
+  }
+
+  .submit-btn:hover {
+    background: var(--accent-hover);
+  }
+
+  .submit-btn:active {
+    transform: scale(0.99);
+  }
+
+  .footer {
+    text-align: center;
+    margin-top: 48px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+</style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="logo">
+      <h1>Ting</h1>
+      <p>A calm place for your tasks</p>
+    </div>
+
+    <form>
+      <div class="form-group">
+        <label for="api-key">API Key</label>
+        <input
+          type="password"
+          id="api-key"
+          placeholder="Enter your API key"
+          autocomplete="current-password"
+        >
+      </div>
+
+      <button type="submit" class="submit-btn">Sign in</button>
+    </form>
+
+    <div class="footer">
+      Ting — your Things Cloud, everywhere
+    </div>
+  </div>
+</body>
+</html>

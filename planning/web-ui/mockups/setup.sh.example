@@ -1,0 +1,105 @@
+#!/bin/bash
+set -e
+
+echo ""
+echo "  ╔═══════════════════════════════════════╗"
+echo "  ║          Ting — Setup Script           ║"
+echo "  ║   Your Things Cloud, everywhere.       ║"
+echo "  ╚═══════════════════════════════════════╝"
+echo ""
+
+# Check flyctl is installed
+if ! command -v fly &> /dev/null; then
+    echo "Error: flyctl is not installed."
+    echo ""
+    echo "Install it with:  brew install flyctl"
+    echo "Or see:           https://fly.io/docs/flyctl/install/"
+    exit 1
+fi
+
+# Check if logged in
+if ! fly auth whoami &> /dev/null; then
+    echo "You need to log in to Fly.io first."
+    echo ""
+    fly auth login
+fi
+
+# Collect credentials
+echo ""
+echo "Enter your Things Cloud credentials"
+echo "(these are stored as encrypted secrets on Fly.io)"
+echo ""
+
+read -p "Things Cloud email: " THINGS_USERNAME
+read -s -p "Things Cloud password: " THINGS_PASSWORD
+echo ""
+echo ""
+
+read -p "Choose a password for the web UI (any string): " AUTH_SECRET
+echo ""
+
+# Pick a region
+echo "Choose a region closest to you:"
+echo ""
+echo "  ams  — Amsterdam        lhr  — London"
+echo "  fra  — Frankfurt        cdg  — Paris"
+echo "  iad  — Washington DC    ord  — Chicago"
+echo "  sjc  — San Jose         sea  — Seattle"
+echo "  syd  — Sydney           nrt  — Tokyo"
+echo "  sin  — Singapore        gru  — São Paulo"
+echo ""
+read -p "Region code [lhr]: " REGION
+REGION=${REGION:-lhr}
+
+# Generate app name
+APP_NAME="ting-$(openssl rand -hex 3)"
+echo ""
+echo "Creating app: $APP_NAME in $REGION"
+echo ""
+
+# Create the app (non-interactive)
+fly launch \
+    --no-deploy \
+    --name "$APP_NAME" \
+    --region "$REGION" \
+    --copy-config \
+    --yes
+
+# Update fly.toml with chosen region
+sed -i.bak "s/primary_region = .*/primary_region = '$REGION'/" fly.toml
+rm -f fly.toml.bak
+
+# Set secrets
+echo ""
+echo "Setting secrets..."
+fly secrets set \
+    THINGS_USERNAME="$THINGS_USERNAME" \
+    THINGS_PASSWORD="$THINGS_PASSWORD" \
+    AUTH_SECRET="$AUTH_SECRET" \
+    WEB_UI=true
+
+# Deploy
+echo ""
+echo "Deploying (this takes 1-2 minutes)..."
+echo ""
+fly deploy
+
+# Done
+APP_URL="https://$APP_NAME.fly.dev"
+echo ""
+echo "  ╔═══════════════════════════════════════╗"
+echo "  ║            Setup complete!             ║"
+echo "  ╚═══════════════════════════════════════╝"
+echo ""
+echo "  Your Ting instance is live at:"
+echo ""
+echo "    $APP_URL"
+echo ""
+echo "  Sign in with the API key you chose."
+echo ""
+echo "  Useful commands:"
+echo "    fly logs              — View server logs"
+echo "    fly status            — Check app status"
+echo "    fly secrets set X=Y   — Update a secret"
+echo "    fly deploy            — Redeploy after changes"
+echo ""
