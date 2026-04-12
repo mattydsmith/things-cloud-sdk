@@ -21,6 +21,8 @@ type widgetTodayItem struct {
 	IsCompleted bool   `json:"isCompleted"`
 }
 
+const widgetExcludedProjectUUID = "MBtLPdfaYx3evGuzYDyHEX"
+
 type widgetLookup interface {
 	Task(uuid string) (*things.Task, error)
 	Area(uuid string) (*things.Area, error)
@@ -49,6 +51,35 @@ func formatWidgetTodayItem(state widgetLookup, task *things.Task) widgetTodayIte
 		ProjectName: widgetProjectName(state, task),
 		IsCompleted: task.Status == things.TaskStatusCompleted,
 	}
+}
+
+func widgetRootProjectUUID(state widgetLookup, task *things.Task) string {
+	current := task
+	seen := map[string]struct{}{}
+	for current != nil && len(current.ParentTaskIDs) > 0 {
+		parentID := current.ParentTaskIDs[0]
+		if parentID == "" {
+			return ""
+		}
+		if _, ok := seen[parentID]; ok {
+			return ""
+		}
+		seen[parentID] = struct{}{}
+
+		parent, err := state.Task(parentID)
+		if err != nil || parent == nil {
+			return parentID
+		}
+		if parent.Type == things.TaskTypeProject || len(parent.ParentTaskIDs) == 0 {
+			return parent.UUID
+		}
+		current = parent
+	}
+	return ""
+}
+
+func widgetIncludeTask(state widgetLookup, task *things.Task) bool {
+	return widgetRootProjectUUID(state, task) != widgetExcludedProjectUUID
 }
 
 type syncStateAccessor struct{}
@@ -177,9 +208,12 @@ func handleWidgetToday(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lookup := &syncStateAccessor{}
-	items := make([]widgetTodayItem, len(tasks))
-	for i, task := range tasks {
-		items[i] = formatWidgetTodayItem(lookup, task)
+	items := make([]widgetTodayItem, 0, len(tasks))
+	for _, task := range tasks {
+		if !widgetIncludeTask(lookup, task) {
+			continue
+		}
+		items = append(items, formatWidgetTodayItem(lookup, task))
 	}
 
 	jsonResponse(w, paginateWidgetTodayItems(items, opts))

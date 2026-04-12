@@ -188,3 +188,59 @@ func TestSortOverdueTasks(t *testing.T) {
 		}
 	}
 }
+
+func TestWidgetIncludeTask(t *testing.T) {
+	t.Parallel()
+
+	t.Run("includes non-routines project tasks", func(t *testing.T) {
+		t.Parallel()
+
+		lookup := stubWidgetLookup{
+			tasks: map[string]*things.Task{
+				"proj-1": {UUID: "proj-1", Type: things.TaskTypeProject, Title: "Home"},
+			},
+		}
+
+		if !widgetIncludeTask(lookup, &things.Task{
+			UUID:          "task-1",
+			ParentTaskIDs: []string{"proj-1"},
+		}) {
+			t.Fatal("expected non-routines task to be included")
+		}
+	})
+
+	t.Run("excludes direct routines project tasks", func(t *testing.T) {
+		t.Parallel()
+
+		lookup := stubWidgetLookup{
+			tasks: map[string]*things.Task{
+				widgetExcludedProjectUUID: {UUID: widgetExcludedProjectUUID, Type: things.TaskTypeProject, Title: "Routines"},
+			},
+		}
+
+		if widgetIncludeTask(lookup, &things.Task{
+			UUID:          "task-2",
+			ParentTaskIDs: []string{widgetExcludedProjectUUID},
+		}) {
+			t.Fatal("expected routines project task to be excluded")
+		}
+	})
+
+	t.Run("excludes subtasks under routines project", func(t *testing.T) {
+		t.Parallel()
+
+		lookup := stubWidgetLookup{
+			tasks: map[string]*things.Task{
+				"parent-task":               {UUID: "parent-task", ParentTaskIDs: []string{widgetExcludedProjectUUID}},
+				widgetExcludedProjectUUID: {UUID: widgetExcludedProjectUUID, Type: things.TaskTypeProject, Title: "Routines"},
+			},
+		}
+
+		if widgetIncludeTask(lookup, &things.Task{
+			UUID:          "task-3",
+			ParentTaskIDs: []string{"parent-task"},
+		}) {
+			t.Fatal("expected nested routines task to be excluded")
+		}
+	})
+}
