@@ -231,7 +231,7 @@ func TestWidgetIncludeTask(t *testing.T) {
 
 		lookup := stubWidgetLookup{
 			tasks: map[string]*things.Task{
-				"parent-task":               {UUID: "parent-task", ParentTaskIDs: []string{widgetExcludedProjectUUID}},
+				"parent-task":             {UUID: "parent-task", ParentTaskIDs: []string{widgetExcludedProjectUUID}},
 				widgetExcludedProjectUUID: {UUID: widgetExcludedProjectUUID, Type: things.TaskTypeProject, Title: "Routines"},
 			},
 		}
@@ -241,6 +241,24 @@ func TestWidgetIncludeTask(t *testing.T) {
 			ParentTaskIDs: []string{"parent-task"},
 		}) {
 			t.Fatal("expected nested routines task to be excluded")
+		}
+	})
+
+	t.Run("excludes tasks in routines heading", func(t *testing.T) {
+		t.Parallel()
+
+		lookup := stubWidgetLookup{
+			tasks: map[string]*things.Task{
+				"heading-1":               {UUID: "heading-1", Type: things.TaskTypeHeading, ParentTaskIDs: []string{widgetExcludedProjectUUID}},
+				widgetExcludedProjectUUID: {UUID: widgetExcludedProjectUUID, Type: things.TaskTypeProject, Title: "Routines"},
+			},
+		}
+
+		if widgetIncludeTask(lookup, &things.Task{
+			UUID:           "task-4",
+			ActionGroupIDs: []string{"heading-1"},
+		}) {
+			t.Fatal("expected routines heading task to be excluded")
 		}
 	})
 }

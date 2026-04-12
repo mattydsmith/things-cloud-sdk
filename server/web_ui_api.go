@@ -53,9 +53,8 @@ func formatWidgetTodayItem(state widgetLookup, task *things.Task) widgetTodayIte
 	}
 }
 
-func widgetRootProjectUUID(state widgetLookup, task *things.Task) string {
+func widgetParentProjectUUID(state widgetLookup, task *things.Task, seen map[string]struct{}) string {
 	current := task
-	seen := map[string]struct{}{}
 	for current != nil && len(current.ParentTaskIDs) > 0 {
 		parentID := current.ParentTaskIDs[0]
 		if parentID == "" {
@@ -74,6 +73,29 @@ func widgetRootProjectUUID(state widgetLookup, task *things.Task) string {
 			return parent.UUID
 		}
 		current = parent
+	}
+	return ""
+}
+
+func widgetRootProjectUUID(state widgetLookup, task *things.Task) string {
+	seen := map[string]struct{}{}
+	if projectUUID := widgetParentProjectUUID(state, task, seen); projectUUID != "" {
+		return projectUUID
+	}
+
+	if task != nil && len(task.ActionGroupIDs) > 0 {
+		headingID := task.ActionGroupIDs[0]
+		if headingID != "" {
+			if _, ok := seen[headingID]; !ok {
+				seen[headingID] = struct{}{}
+				heading, err := state.Task(headingID)
+				if err == nil && heading != nil {
+					if projectUUID := widgetParentProjectUUID(state, heading, seen); projectUUID != "" {
+						return projectUUID
+					}
+				}
+			}
+		}
 	}
 	return ""
 }
