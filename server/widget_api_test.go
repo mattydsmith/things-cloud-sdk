@@ -164,3 +164,27 @@ func TestPaginateWidgetTodayItems(t *testing.T) {
 		t.Fatalf("expected empty page, got %+v", got)
 	}
 }
+
+func TestSortOverdueTasks(t *testing.T) {
+	t.Parallel()
+
+	older := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
+	newer := time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC)
+	sameDay := time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC)
+
+	tasks := []*things.Task{
+		{UUID: "c", ScheduledDate: &newer, Index: 3},
+		{UUID: "a", ScheduledDate: &older, Index: 8},
+		{UUID: "b", ScheduledDate: &sameDay, Index: 1},
+	}
+
+	sortOverdueTasks(tasks)
+
+	got := []string{tasks[0].UUID, tasks[1].UUID, tasks[2].UUID}
+	want := []string{"a", "b", "c"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("sorted UUIDs = %v, want %v", got, want)
+		}
+	}
+}

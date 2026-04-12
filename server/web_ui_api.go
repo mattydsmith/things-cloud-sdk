@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 
 	things "github.com/arthursoares/things-cloud-sdk"
@@ -72,6 +73,29 @@ func isOverdueOpenTask(task *things.Task, todayStart time.Time) bool {
 		task.ScheduledDate.Before(todayStart)
 }
 
+func sortOverdueTasks(tasks []*things.Task) {
+	sort.SliceStable(tasks, func(i, j int) bool {
+		left := tasks[i]
+		right := tasks[j]
+		switch {
+		case left == nil:
+			return false
+		case right == nil:
+			return true
+		case left.ScheduledDate == nil:
+			return false
+		case right.ScheduledDate == nil:
+			return true
+		case !left.ScheduledDate.Equal(*right.ScheduledDate):
+			return left.ScheduledDate.Before(*right.ScheduledDate)
+		case left.Index != right.Index:
+			return left.Index < right.Index
+		default:
+			return left.UUID < right.UUID
+		}
+	})
+}
+
 func widgetMergedTodayTasks(state *sync.State) ([]*things.Task, error) {
 	todayTasks, err := state.TasksInToday(sync.QueryOpts{})
 	if err != nil {
@@ -84,16 +108,15 @@ func widgetMergedTodayTasks(state *sync.State) ([]*things.Task, error) {
 	}
 
 	seen := make(map[string]struct{}, len(todayTasks))
-	merged := make([]*things.Task, 0, len(todayTasks))
 	for _, task := range todayTasks {
 		if task == nil {
 			continue
 		}
 		seen[task.UUID] = struct{}{}
-		merged = append(merged, task)
 	}
 
 	todayStart := widgetTodayStartUTC()
+	overdue := make([]*things.Task, 0)
 	for _, task := range allTasks {
 		if task == nil || !isOverdueOpenTask(task, todayStart) {
 			continue
@@ -102,8 +125,14 @@ func widgetMergedTodayTasks(state *sync.State) ([]*things.Task, error) {
 			continue
 		}
 		seen[task.UUID] = struct{}{}
-		merged = append(merged, task)
+		overdue = append(overdue, task)
 	}
+
+	sortOverdueTasks(overdue)
+
+	merged := make([]*things.Task, 0, len(overdue)+len(todayTasks))
+	merged = append(merged, overdue...)
+	merged = append(merged, todayTasks...)
 
 	return merged, nil
 }
