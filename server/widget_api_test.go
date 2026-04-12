@@ -3,8 +3,10 @@ package main
 import (
 	"errors"
 	"testing"
+	"time"
 
 	things "github.com/arthursoares/things-cloud-sdk"
+	"github.com/arthursoares/things-cloud-sdk/sync"
 )
 
 type stubWidgetLookup struct {
@@ -91,4 +93,74 @@ func TestFormatWidgetTodayItem(t *testing.T) {
 			t.Fatalf("ProjectName = %q, want empty", item.ProjectName)
 		}
 	})
+}
+
+func TestIsOverdueOpenTask(t *testing.T) {
+	t.Parallel()
+
+	todayStart := time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
+	yesterday := todayStart.Add(-24 * time.Hour)
+	tomorrow := todayStart.Add(24 * time.Hour)
+
+	tests := []struct {
+		name string
+		task *things.Task
+		want bool
+	}{
+		{
+			name: "open task scheduled before today is overdue",
+			task: &things.Task{Status: things.TaskStatusPending, ScheduledDate: &yesterday},
+			want: true,
+		},
+		{
+			name: "open task scheduled today is not overdue",
+			task: &things.Task{Status: things.TaskStatusPending, ScheduledDate: &todayStart},
+			want: false,
+		},
+		{
+			name: "open task scheduled in future is not overdue",
+			task: &things.Task{Status: things.TaskStatusPending, ScheduledDate: &tomorrow},
+			want: false,
+		},
+		{
+			name: "completed task is not overdue for widget",
+			task: &things.Task{Status: things.TaskStatusCompleted, ScheduledDate: &yesterday},
+			want: false,
+		},
+		{
+			name: "task without scheduled date is not overdue",
+			task: &things.Task{Status: things.TaskStatusPending},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isOverdueOpenTask(tt.task, todayStart); got != tt.want {
+				t.Fatalf("isOverdueOpenTask() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPaginateWidgetTodayItems(t *testing.T) {
+	t.Parallel()
+
+	items := []widgetTodayItem{
+		{UUID: "1"},
+		{UUID: "2"},
+		{UUID: "3"},
+	}
+
+	got := paginateWidgetTodayItems(items, sync.QueryOpts{Offset: 1, Limit: 1})
+	if len(got) != 1 || got[0].UUID != "2" {
+		t.Fatalf("unexpected paginated items: %+v", got)
+	}
+
+	got = paginateWidgetTodayItems(items, sync.QueryOpts{Offset: 10, Limit: 5})
+	if len(got) != 0 {
+		t.Fatalf("expected empty page, got %+v", got)
+	}
 }

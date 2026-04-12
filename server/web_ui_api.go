@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	things "github.com/arthursoares/things-cloud-sdk"
+	"github.com/arthursoares/things-cloud-sdk/sync"
 )
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -58,6 +60,70 @@ func (*syncStateAccessor) Area(uuid string) (*things.Area, error) {
 	return syncer.State().Area(uuid)
 }
 
+func widgetTodayStartUTC() time.Time {
+	now := time.Now().UTC()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func isOverdueOpenTask(task *things.Task, todayStart time.Time) bool {
+	return task != nil &&
+		task.Status == things.TaskStatusPending &&
+		task.ScheduledDate != nil &&
+		task.ScheduledDate.Before(todayStart)
+}
+
+func widgetMergedTodayTasks(state *sync.State) ([]*things.Task, error) {
+	todayTasks, err := state.TasksInToday(sync.QueryOpts{})
+	if err != nil {
+		return nil, err
+	}
+
+	allTasks, err := state.AllTasks(sync.QueryOpts{})
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{}, len(todayTasks))
+	merged := make([]*things.Task, 0, len(todayTasks))
+	for _, task := range todayTasks {
+		if task == nil {
+			continue
+		}
+		seen[task.UUID] = struct{}{}
+		merged = append(merged, task)
+	}
+
+	todayStart := widgetTodayStartUTC()
+	for _, task := range allTasks {
+		if task == nil || !isOverdueOpenTask(task, todayStart) {
+			continue
+		}
+		if _, ok := seen[task.UUID]; ok {
+			continue
+		}
+		seen[task.UUID] = struct{}{}
+		merged = append(merged, task)
+	}
+
+	return merged, nil
+}
+
+func paginateWidgetTodayItems(items []widgetTodayItem, opts sync.QueryOpts) []widgetTodayItem {
+	if opts.Offset >= len(items) {
+		return []widgetTodayItem{}
+	}
+
+	start := opts.Offset
+	if start < 0 {
+		start = 0
+	}
+	end := len(items)
+	if opts.Limit > 0 && start+opts.Limit < end {
+		end = start + opts.Limit
+	}
+	return items[start:end]
+}
+
 func handleWidgetToday(w http.ResponseWriter, r *http.Request) {
 	opts, err := paginationQueryOpts(r)
 	if err != nil {
@@ -71,7 +137,7 @@ func handleWidgetToday(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state := syncer.State()
-	tasks, err := state.TasksInToday(opts)
+	tasks, err := widgetMergedTodayTasks(state)
 	if err != nil {
 		jsonError(w, fmt.Sprintf("failed to get today widget items: %v", err), http.StatusInternalServerError)
 		return
@@ -87,7 +153,7 @@ func handleWidgetToday(w http.ResponseWriter, r *http.Request) {
 		items[i] = formatWidgetTodayItem(lookup, task)
 	}
 
-	jsonResponse(w, items)
+	jsonResponse(w, paginateWidgetTodayItems(items, opts))
 }
 
 func handleTaskByUUID(w http.ResponseWriter, r *http.Request) {
