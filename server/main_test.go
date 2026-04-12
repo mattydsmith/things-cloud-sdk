@@ -135,3 +135,10 @@ func TestServeWithGracefulShutdown(t *testing.T) {
 		}
 	})
 }
+
+func TestRegisterRoutes_DoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	registerRoutes(mux)
+}

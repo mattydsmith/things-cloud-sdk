@@ -324,6 +324,7 @@ type CreateTaskRequest struct {
 	When       string `json:"when,omitempty"`        // today, anytime, someday, inbox, YYYY-MM-DD
 	Deadline   string `json:"deadline,omitempty"`    // YYYY-MM-DD
 	Project    string `json:"project,omitempty"`     // project UUID
+	Area       string `json:"area,omitempty"`        // area UUID
 	ParentTask string `json:"parent_task,omitempty"` // parent task UUID (for subtasks)
 	Tags       string `json:"tags,omitempty"`        // comma-separated tag UUIDs
 	Repeat     string `json:"repeat,omitempty"`      // daily, weekly, monthly, yearly, every N days/weeks/months/years, optional "until YYYY-MM-DD"
@@ -554,6 +555,9 @@ func createTask(req CreateTaskRequest) (string, error) {
 	if err := validateOptionalUUID("project", req.Project); err != nil {
 		return "", err
 	}
+	if err := validateOptionalUUID("area", req.Area); err != nil {
+		return "", err
+	}
 	if err := validateOptionalUUID("parent_task", req.ParentTask); err != nil {
 		return "", err
 	}
@@ -602,11 +606,18 @@ func createTask(req CreateTaskRequest) (string, error) {
 	}
 
 	pr := []string{}
+	ar := []string{}
 	if req.ParentTask != "" {
 		pr = []string{req.ParentTask}
 	} else if req.Project != "" {
 		pr = []string{req.Project}
 		if req.When == "" {
+			st = 1
+		}
+	}
+	if req.Area != "" {
+		ar = []string{req.Area}
+		if req.When == "" && req.Project == "" && req.ParentTask == "" {
 			st = 1
 		}
 	}
@@ -632,7 +643,7 @@ func createTask(req CreateTaskRequest) (string, error) {
 	payload := taskCreatePayload{
 		Tp: 0, Sr: sr, Dds: nil, Rt: []string{}, Rmd: nil,
 		Ss: 0, Tr: false, Dl: []string{}, Icp: false, St: st,
-		Ar: []string{}, Tt: req.Title, Do: 0, Lai: nil, Tir: tir,
+		Ar: ar, Tt: req.Title, Do: 0, Lai: nil, Tir: tir,
 		Tg: tg, Agr: []string{}, Ix: 0, Cd: now, Lt: false,
 		Icc: 0, Md: nil, Ti: 0, Dd: dd, Ato: nil, Nt: nt,
 		Icsd: nil, Pr: pr, Rp: nil, Acrd: nil, Sp: nil,
@@ -775,14 +786,53 @@ func moveTaskToToday(uuid string) error {
 	if err := validateUUID("uuid", uuid); err != nil {
 		return err
 	}
-	today := todayMidnightUTC()
-	u := newTaskUpdate().schedule(1, today, today)
+
+	var task *thingscloud.Task
+	if syncer != nil {
+		task, _ = syncer.State().Task(uuid)
+	}
+
+	u := taskUpdateForMoveToToday(task)
 	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
 	if err := historyWrite(env); err != nil {
 		return err
 	}
 	syncAfterWrite()
 	return nil
+}
+
+func taskUpdateForMoveToToday(task *thingscloud.Task) *taskUpdate {
+	today := todayMidnightUTC()
+	if task != nil && task.Schedule == thingscloud.TaskScheduleInbox {
+		return newTaskUpdate().schedule(0, nil, today)
+	}
+	return newTaskUpdate().schedule(1, today, today)
+}
+
+func removeTaskFromToday(uuid string) error {
+	if err := validateUUID("uuid", uuid); err != nil {
+		return err
+	}
+
+	var task *thingscloud.Task
+	if syncer != nil {
+		task, _ = syncer.State().Task(uuid)
+	}
+
+	u := taskUpdateForRemoveFromToday(task)
+	env := writeEnvelope{id: uuid, action: 1, kind: "Task6", payload: u.build()}
+	if err := historyWrite(env); err != nil {
+		return err
+	}
+	syncAfterWrite()
+	return nil
+}
+
+func taskUpdateForRemoveFromToday(task *thingscloud.Task) *taskUpdate {
+	if task != nil && task.Schedule == thingscloud.TaskScheduleInbox {
+		return newTaskUpdate().schedule(0, nil, nil)
+	}
+	return newTaskUpdate().schedule(1, nil, nil)
 }
 
 func moveTaskToAnytime(uuid string) error {
@@ -1179,6 +1229,90 @@ func handleEditTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, map[string]string{"status": "updated", "uuid": req.UUID})
+}
+
+func handleMoveTaskToToday(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req UUIDRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSONDecodeError(w, "invalid JSON: ", err)
+		return
+	}
+	if req.UUID == "" {
+		jsonError(w, "uuid is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := moveTaskToToday(req.UUID); err != nil {
+		code := http.StatusInternalServerError
+		if isInvalidInput(err) {
+			code = http.StatusBadRequest
+		}
+		jsonError(w, err.Error(), code)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "moved_to_today", "uuid": req.UUID})
+}
+
+func handleMoveTaskToAnytime(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req UUIDRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSONDecodeError(w, "invalid JSON: ", err)
+		return
+	}
+	if req.UUID == "" {
+		jsonError(w, "uuid is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := moveTaskToAnytime(req.UUID); err != nil {
+		code := http.StatusInternalServerError
+		if isInvalidInput(err) {
+			code = http.StatusBadRequest
+		}
+		jsonError(w, err.Error(), code)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "moved_to_anytime", "uuid": req.UUID})
+}
+
+func handleRemoveTaskFromToday(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req UUIDRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		writeJSONDecodeError(w, "invalid JSON: ", err)
+		return
+	}
+	if req.UUID == "" {
+		jsonError(w, "uuid is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := removeTaskFromToday(req.UUID); err != nil {
+		code := http.StatusInternalServerError
+		if isInvalidInput(err) {
+			code = http.StatusBadRequest
+		}
+		jsonError(w, err.Error(), code)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "removed_from_today", "uuid": req.UUID})
 }
 
 // Ensure writeEnvelope implements Identifiable

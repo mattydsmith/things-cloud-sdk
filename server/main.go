@@ -270,59 +270,6 @@ func handleTags(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, tags)
 }
 
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		apiKey := os.Getenv("API_KEY")
-		if apiKey == "" {
-			next(w, r)
-			return
-		}
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer "+apiKey {
-			jsonError(w, "unauthorized", 401)
-			return
-		}
-		next(w, r)
-	}
-}
-
-func authHandlerMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiKey := os.Getenv("API_KEY")
-		if apiKey == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if r.Header.Get("Authorization") != "Bearer "+apiKey {
-			jsonError(w, "unauthorized", 401)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func debugAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if os.Getenv("DEBUG") != "true" {
-			jsonError(w, "not found", 404)
-			return
-		}
-
-		apiKey := os.Getenv("API_KEY")
-		if apiKey == "" {
-			jsonError(w, "debug endpoints require API_KEY", 503)
-			return
-		}
-
-		if r.Header.Get("Authorization") != "Bearer "+apiKey {
-			jsonError(w, "unauthorized", 401)
-			return
-		}
-
-		next(w, r)
-	}
-}
-
 func runInitialSync(s initialSyncer) error {
 	log.Println("Performing initial sync...")
 	changes, err := s.Sync()
@@ -370,6 +317,151 @@ func serveWithGracefulShutdown(ctx context.Context, srv shutdownServer, timeout 
 	return nil
 }
 
+func registerRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		handleRoot(w, r)
+	})
+	mux.HandleFunc("GET /api/health", handleHealth)
+
+	mux.HandleFunc("POST /api/auth/login", handleAuthLogin)
+	mux.HandleFunc("POST /api/auth/logout", handleAuthLogout)
+	mux.HandleFunc("GET /api/auth/session", handleAuthSession)
+	mux.HandleFunc("GET /api/verify", authMiddleware(handleVerify))
+	mux.HandleFunc("GET /api/sync", authMiddleware(handleSync))
+	mux.HandleFunc("GET /api/tasks/inbox", authMiddleware(handleInbox))
+	mux.HandleFunc("GET /api/tasks/today", authMiddleware(handleToday))
+	mux.HandleFunc("GET /api/tasks/anytime", authMiddleware(handleAnytime))
+	mux.HandleFunc("GET /api/tasks/someday", authMiddleware(handleSomeday))
+	mux.HandleFunc("GET /api/tasks/upcoming", authMiddleware(handleUpcoming))
+	mux.HandleFunc("GET /api/projects", authMiddleware(handleProjects))
+	mux.HandleFunc("GET /api/areas", authMiddleware(handleAreas))
+	mux.HandleFunc("GET /api/tags", authMiddleware(handleTags))
+	mux.HandleFunc("GET /api/projects/{uuid}/tasks", authMiddleware(handleProjectTasks))
+	mux.HandleFunc("GET /api/areas/{uuid}", authMiddleware(handleAreaByUUID))
+	mux.HandleFunc("GET /api/areas/{uuid}/tasks", authMiddleware(handleAreaTasks))
+	mux.HandleFunc("GET /api/tasks/{uuid}", authMiddleware(handleTaskByUUID))
+	mux.HandleFunc("GET /api/tasks/{uuid}/checklist", authMiddleware(handleTaskChecklist))
+	mux.HandleFunc("GET /api/widget/today", authMiddleware(handleWidgetToday))
+
+	mux.HandleFunc("POST /api/tasks/create", authMiddleware(handleCreateTask))
+	mux.HandleFunc("POST /api/tasks/complete", authMiddleware(handleCompleteTask))
+	mux.HandleFunc("POST /api/tasks/trash", authMiddleware(handleTrashTask))
+	mux.HandleFunc("POST /api/tasks/edit", authMiddleware(handleEditTask))
+	mux.HandleFunc("POST /api/tasks/move-to-today", authMiddleware(handleMoveTaskToToday))
+	mux.HandleFunc("POST /api/tasks/remove-from-today", authMiddleware(handleRemoveTaskFromToday))
+	mux.HandleFunc("POST /api/tasks/move-to-anytime", authMiddleware(handleMoveTaskToAnytime))
+
+	mux.HandleFunc("GET /api/debug/history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		items, err := history.RawItems()
+		if err != nil {
+			jsonError(w, err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(items)
+	}))
+
+	mux.HandleFunc("GET /api/debug/histories", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		histories, err := client.Histories()
+		if err != nil {
+			jsonError(w, fmt.Sprintf("list histories failed: %v", err), 500)
+			return
+		}
+		keys := make([]string, len(histories))
+		for i, h := range histories {
+			keys[i] = h.ID
+		}
+		jsonResponse(w, map[string]any{
+			"own_history": history.ID,
+			"all_keys":    keys,
+			"total":       len(keys),
+		})
+	}))
+
+	mux.HandleFunc("POST /api/debug/delete-history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		keyToDelete := history.ID
+		var body struct {
+			Key string `json:"key"`
+		}
+		ok, err := decodeOptionalJSONBody(w, r, &body)
+		if err != nil {
+			if isRequestBodyTooLarge(err) {
+				jsonError(w, errRequestBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
+				return
+			}
+		} else if ok && body.Key != "" {
+			keyToDelete = body.Key
+		}
+		h := client.HistoryWithID(keyToDelete)
+		if err := h.Delete(); err != nil {
+			jsonError(w, fmt.Sprintf("delete failed: %v", err), 500)
+			return
+		}
+		log.Printf("[DELETE-HISTORY] key=%s deleted successfully", keyToDelete)
+		jsonResponse(w, map[string]any{
+			"deleted": keyToDelete,
+			"status":  "accepted",
+		})
+	}))
+
+	mux.HandleFunc("POST /api/debug/nuke-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		email := client.EMail
+		password := os.Getenv("THINGS_PASSWORD")
+
+		log.Printf("[NUKE] Deleting account %s...", email)
+		if err := client.Accounts.Delete(); err != nil {
+			jsonError(w, fmt.Sprintf("delete failed: %v", err), 500)
+			return
+		}
+		log.Printf("[NUKE] Account deleted. Recreating...")
+
+		newClient, err := client.Accounts.SignUp(email, password)
+		if err != nil {
+			jsonError(w, fmt.Sprintf("signup failed: %v", err), 500)
+			return
+		}
+		log.Printf("[NUKE] Signup complete. Account needs email confirmation.")
+
+		_ = newClient
+		jsonResponse(w, map[string]any{
+			"status":  "account deleted and re-created",
+			"email":   email,
+			"message": "Check email for confirmation code, then POST to /api/debug/confirm-account",
+		})
+	}))
+
+	mux.HandleFunc("POST /api/debug/confirm-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Code string `json:"code"`
+		}
+		if err := decodeJSONBody(w, r, &body); err != nil {
+			if isRequestBodyTooLarge(err) {
+				jsonError(w, errRequestBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
+				return
+			}
+			jsonError(w, "JSON body with 'code' required", 400)
+			return
+		}
+		if body.Code == "" {
+			jsonError(w, "JSON body with 'code' required", 400)
+			return
+		}
+		if err := client.Accounts.Confirm(body.Code); err != nil {
+			jsonError(w, fmt.Sprintf("confirm failed: %v", err), 500)
+			return
+		}
+		if err := client.Accounts.AcceptSLA(); err != nil {
+			log.Printf("[CONFIRM] SLA accept failed (non-fatal): %v", err)
+		}
+		log.Printf("[CONFIRM] Account confirmed and SLA accepted")
+		jsonResponse(w, map[string]any{
+			"status": "confirmed",
+		})
+	}))
+
+	mux.Handle("/mcp", newMCPHandler())
+}
+
 func main() {
 	username := os.Getenv("THINGS_USERNAME")
 	password := os.Getenv("THINGS_PASSWORD")
@@ -406,162 +498,12 @@ func main() {
 	}
 	log.Println("History ready for writes")
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			jsonError(w, "not found", 404)
-			return
-		}
-		jsonResponse(w, map[string]string{"service": "things-cloud-api", "status": "ok"})
-	})
-
-	http.HandleFunc("/api/verify", authMiddleware(handleVerify))
-	http.HandleFunc("/api/sync", authMiddleware(handleSync))
-	http.HandleFunc("/api/tasks/inbox", authMiddleware(handleInbox))
-	http.HandleFunc("/api/tasks/today", authMiddleware(handleToday))
-	http.HandleFunc("/api/tasks/anytime", authMiddleware(handleAnytime))
-	http.HandleFunc("/api/tasks/someday", authMiddleware(handleSomeday))
-	http.HandleFunc("/api/tasks/upcoming", authMiddleware(handleUpcoming))
-	http.HandleFunc("/api/projects", authMiddleware(handleProjects))
-	http.HandleFunc("/api/areas", authMiddleware(handleAreas))
-	http.HandleFunc("/api/tags", authMiddleware(handleTags))
-
-	// Write endpoints
-	http.HandleFunc("/api/tasks/create", authMiddleware(handleCreateTask))
-	http.HandleFunc("/api/tasks/complete", authMiddleware(handleCompleteTask))
-	http.HandleFunc("/api/tasks/trash", authMiddleware(handleTrashTask))
-	http.HandleFunc("/api/tasks/edit", authMiddleware(handleEditTask))
-
-	// Debug endpoint — dump raw write history items
-	http.HandleFunc("/api/debug/history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		items, err := history.RawItems()
-		if err != nil {
-			jsonError(w, err.Error(), 500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(items)
-	}))
-
-	// Debug endpoint — list all history keys (uses SDK method with auth)
-	http.HandleFunc("/api/debug/histories", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		histories, err := client.Histories()
-		if err != nil {
-			jsonError(w, fmt.Sprintf("list histories failed: %v", err), 500)
-			return
-		}
-		keys := make([]string, len(histories))
-		for i, h := range histories {
-			keys[i] = h.ID
-		}
-		jsonResponse(w, map[string]any{
-			"own_history": history.ID,
-			"all_keys":    keys,
-			"total":       len(keys),
-		})
-	}))
-
-	// Debug endpoint — delete the current history key (uses SDK method with auth)
-	http.HandleFunc("/api/debug/delete-history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			jsonError(w, "POST required", 405)
-			return
-		}
-		keyToDelete := history.ID
-		var body struct {
-			Key string `json:"key"`
-		}
-		ok, err := decodeOptionalJSONBody(w, r, &body)
-		if err != nil {
-			if isRequestBodyTooLarge(err) {
-				jsonError(w, errRequestBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
-				return
-			}
-		} else if ok && body.Key != "" {
-			keyToDelete = body.Key
-		}
-		h := client.HistoryWithID(keyToDelete)
-		if err := h.Delete(); err != nil {
-			jsonError(w, fmt.Sprintf("delete failed: %v", err), 500)
-			return
-		}
-		log.Printf("[DELETE-HISTORY] key=%s deleted successfully", keyToDelete)
-		jsonResponse(w, map[string]any{
-			"deleted": keyToDelete,
-			"status":  "accepted",
-		})
-	}))
-
-	// Debug endpoint — delete account and recreate it
-	http.HandleFunc("/api/debug/nuke-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			jsonError(w, "POST required", 405)
-			return
-		}
-		email := client.EMail
-		password := os.Getenv("THINGS_PASSWORD")
-
-		log.Printf("[NUKE] Deleting account %s...", email)
-		if err := client.Accounts.Delete(); err != nil {
-			jsonError(w, fmt.Sprintf("delete failed: %v", err), 500)
-			return
-		}
-		log.Printf("[NUKE] Account deleted. Recreating...")
-
-		newClient, err := client.Accounts.SignUp(email, password)
-		if err != nil {
-			jsonError(w, fmt.Sprintf("signup failed: %v", err), 500)
-			return
-		}
-		log.Printf("[NUKE] Signup complete. Account needs email confirmation.")
-
-		_ = newClient
-		jsonResponse(w, map[string]any{
-			"status":  "account deleted and re-created",
-			"email":   email,
-			"message": "Check email for confirmation code, then POST to /api/debug/confirm-account",
-		})
-	}))
-
-	// Debug endpoint — confirm account with email code
-	http.HandleFunc("/api/debug/confirm-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			jsonError(w, "POST required", 405)
-			return
-		}
-		var body struct {
-			Code string `json:"code"`
-		}
-		if err := decodeJSONBody(w, r, &body); err != nil {
-			if isRequestBodyTooLarge(err) {
-				jsonError(w, errRequestBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
-				return
-			}
-			jsonError(w, "JSON body with 'code' required", 400)
-			return
-		}
-		if body.Code == "" {
-			jsonError(w, "JSON body with 'code' required", 400)
-			return
-		}
-		if err := client.Accounts.Confirm(body.Code); err != nil {
-			jsonError(w, fmt.Sprintf("confirm failed: %v", err), 500)
-			return
-		}
-		if err := client.Accounts.AcceptSLA(); err != nil {
-			log.Printf("[CONFIRM] SLA accept failed (non-fatal): %v", err)
-		}
-		log.Printf("[CONFIRM] Account confirmed and SLA accepted")
-		jsonResponse(w, map[string]any{
-			"status": "confirmed",
-		})
-	}))
-
-	// MCP endpoint (no bearer auth — claude.ai connectors use OAuth which we don't implement)
-	http.Handle("/mcp", newMCPHandler())
+	mux := http.NewServeMux()
+	registerRoutes(mux)
 
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	server := &http.Server{Addr: ":" + port}
+	server := &http.Server{Addr: ":" + port, Handler: mux}
 
 	log.Printf("Starting server on :%s", port)
 	if err := serveWithGracefulShutdown(shutdownCtx, server, shutdownTimeout); err != nil {

@@ -203,6 +203,7 @@ See **[docs/endpoints-and-things-cloud.md](docs/endpoints-and-things-cloud.md)**
 | `GET /api/tasks/anytime` | Tasks in Anytime. Optional query params: `limit`, `offset` |
 | `GET /api/tasks/someday` | Tasks in Someday. Optional query params: `limit`, `offset` |
 | `GET /api/tasks/upcoming` | Tasks in Upcoming. Optional query params: `limit`, `offset` |
+| `GET /api/widget/today` | Compact Today-view payload for widgets: `uuid`, `title`, `projectName`, `isCompleted` |
 | `GET /api/projects` | All projects. Optional query params: `limit`, `offset` |
 | `GET /api/areas` | All areas. Optional query params: `limit`, `offset` |
 | `GET /api/tags` | All tags. Optional query params: `limit`, `offset` |
@@ -210,6 +211,19 @@ See **[docs/endpoints-and-things-cloud.md](docs/endpoints-and-things-cloud.md)**
 | `POST /api/tasks/edit` | Edit a task |
 | `POST /api/tasks/complete` | Complete a task |
 | `POST /api/tasks/trash` | Trash a task |
+
+Example widget payload:
+
+```json
+[
+  {
+    "uuid": "CoLoz6a9eaMAj99FQ6guo9",
+    "title": "Sort out HBO Max and sky",
+    "projectName": "Home",
+    "isCompleted": false
+  }
+]
+```
 
 ## SDK
 
