@@ -21,6 +21,11 @@ type widgetTodayItem struct {
 	IsCompleted bool   `json:"isCompleted"`
 }
 
+type taskDetailResponse struct {
+	*things.Task
+	ChecklistCount int `json:"ChecklistCount"`
+}
+
 const widgetExcludedProjectUUID = "MBtLPdfaYx3evGuzYDyHEX"
 
 type widgetLookup interface {
@@ -206,6 +211,13 @@ func paginateWidgetTodayItems(items []widgetTodayItem, opts sync.QueryOpts) []wi
 	return items[start:end]
 }
 
+func buildTaskDetailResponse(task *things.Task, checklistItems []*things.CheckListItem) taskDetailResponse {
+	return taskDetailResponse{
+		Task:           task,
+		ChecklistCount: len(checklistItems),
+	}
+}
+
 func handleWidgetToday(w http.ResponseWriter, r *http.Request) {
 	opts, err := paginationQueryOpts(r)
 	if err != nil {
@@ -268,7 +280,13 @@ func handleTaskByUUID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonResponse(w, task)
+	items, err := syncer.State().ChecklistItems(uuid)
+	if err != nil {
+		jsonError(w, fmt.Sprintf("failed to get checklist items: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse(w, buildTaskDetailResponse(task, items))
 }
 
 func handleTaskChecklist(w http.ResponseWriter, r *http.Request) {

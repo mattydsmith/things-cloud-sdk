@@ -199,6 +199,8 @@ See **[docs/endpoints-and-things-cloud.md](docs/endpoints-and-things-cloud.md)**
 | `GET /api/verify` | Verify Things Cloud credentials |
 | `GET /api/sync` | Trigger sync, returns change count |
 | `GET /api/tasks/today` | Tasks scheduled for today. Optional query params: `limit`, `offset` |
+| `GET /api/tasks/{uuid}` | Get a single task. Includes `ChecklistCount` so clients can tell whether checklist items exist without a second call |
+| `GET /api/tasks/{uuid}/checklist` | Checklist items for a task |
 | `GET /api/tasks/inbox` | Tasks in the inbox. Optional query params: `limit`, `offset` |
 | `GET /api/tasks/anytime` | Tasks in Anytime. Optional query params: `limit`, `offset` |
 | `GET /api/tasks/someday` | Tasks in Someday. Optional query params: `limit`, `offset` |
@@ -223,6 +225,25 @@ Example widget payload:
     "isCompleted": false
   }
 ]
+```
+
+Widget Today behavior:
+
+- returns a compact Today-view payload for widgets
+- orders overdue open tasks first, oldest scheduled date first
+- then returns tasks due today
+- excludes tasks under the `☀️ Routines` project, including tasks attached through headings/action groups
+
+Example task detail payload:
+
+```json
+{
+  "UUID": "3Di38TbaTAS5TbkCxwDLt4",
+  "Title": "Check driver door jamb label for EX30 colour code, then order Volvo touch-up pen",
+  "Note": "Small stone chip on the bumper...",
+  "TagIDs": ["5Gnvio1bSv9HwQmZMdvQpR", "RdixPEoCd2WD2V7DiaYi6g"],
+  "ChecklistCount": 2
+}
 ```
 
 ## SDK
