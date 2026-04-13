@@ -19,6 +19,7 @@ type widgetTodayItem struct {
 	Title       string `json:"title"`
 	ProjectName string `json:"projectName"`
 	IsCompleted bool   `json:"isCompleted"`
+	Deadline    string `json:"deadline,omitempty"`
 }
 
 type taskDetailResponse struct {
@@ -50,12 +51,128 @@ func widgetProjectName(state widgetLookup, task *things.Task) string {
 }
 
 func formatWidgetTodayItem(state widgetLookup, task *things.Task) widgetTodayItem {
-	return widgetTodayItem{
+	item := widgetTodayItem{
 		UUID:        task.UUID,
 		Title:       task.Title,
 		ProjectName: widgetProjectName(state, task),
 		IsCompleted: task.Status == things.TaskStatusCompleted,
 	}
+	if task.DeadlineDate != nil {
+		item.Deadline = task.DeadlineDate.Format("2006-01-02")
+	}
+	return item
+}
+
+func widgetTomorrowStartUTC() time.Time {
+	return widgetTodayStartUTC().Add(24 * time.Hour)
+}
+
+func hasDueDeadline(task *things.Task, tomorrowStart time.Time) bool {
+	return task != nil &&
+		task.Status == things.TaskStatusPending &&
+		task.DeadlineDate != nil &&
+		task.DeadlineDate.Before(tomorrowStart)
+}
+
+func isTodayTask(task *things.Task, todayStart, tomorrowStart time.Time) bool {
+	return task != nil &&
+		((task.TodayIndexReference != nil && !task.TodayIndexReference.Before(todayStart) && task.TodayIndexReference.Before(tomorrowStart)) ||
+			(task.ScheduledDate != nil && !task.ScheduledDate.Before(todayStart) && task.ScheduledDate.Before(tomorrowStart)))
+}
+
+func widgetTaskPriority(task *things.Task, todayStart, tomorrowStart time.Time) int {
+	switch {
+	case hasDueDeadline(task, tomorrowStart):
+		return 0
+	case isOverdueOpenTask(task, todayStart):
+		return 1
+	case isTodayTask(task, todayStart, tomorrowStart):
+		return 2
+	default:
+		return 3
+	}
+}
+
+func sortWidgetTasksAt(tasks []*things.Task, todayStart time.Time) {
+	tomorrowStart := todayStart.Add(24 * time.Hour)
+	sort.SliceStable(tasks, func(i, j int) bool {
+		left := tasks[i]
+		right := tasks[j]
+		lp := widgetTaskPriority(left, todayStart, tomorrowStart)
+		rp := widgetTaskPriority(right, todayStart, tomorrowStart)
+		if lp != rp {
+			return lp < rp
+		}
+		if lp == 0 {
+			switch {
+			case left.DeadlineDate == nil:
+				return false
+			case right.DeadlineDate == nil:
+				return true
+			case !left.DeadlineDate.Equal(*right.DeadlineDate):
+				return left.DeadlineDate.Before(*right.DeadlineDate)
+			}
+		}
+		if lp == 1 {
+			switch {
+			case left.ScheduledDate == nil:
+				return false
+			case right.ScheduledDate == nil:
+				return true
+			case !left.ScheduledDate.Equal(*right.ScheduledDate):
+				return left.ScheduledDate.Before(*right.ScheduledDate)
+			}
+		}
+		if left.Index != right.Index {
+			return left.Index < right.Index
+		}
+		return left.UUID < right.UUID
+	})
+}
+
+func sortWidgetTasks(tasks []*things.Task) {
+	sortWidgetTasksAt(tasks, widgetTodayStartUTC())
+}
+
+func widgetMergedTodayTasks(state *sync.State) ([]*things.Task, error) {
+	todayTasks, err := state.TasksInToday(sync.QueryOpts{})
+	if err != nil {
+		return nil, err
+	}
+
+	allTasks, err := state.AllTasks(sync.QueryOpts{})
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{}, len(todayTasks))
+	merged := make([]*things.Task, 0, len(allTasks))
+	for _, task := range todayTasks {
+		if task == nil {
+			continue
+		}
+		seen[task.UUID] = struct{}{}
+		merged = append(merged, task)
+	}
+
+	todayStart := widgetTodayStartUTC()
+	tomorrowStart := todayStart.Add(24 * time.Hour)
+	for _, task := range allTasks {
+		if task == nil {
+			continue
+		}
+		if _, ok := seen[task.UUID]; ok {
+			continue
+		}
+		if !isOverdueOpenTask(task, todayStart) && !hasDueDeadline(task, tomorrowStart) {
+			continue
+		}
+		seen[task.UUID] = struct{}{}
+		merged = append(merged, task)
+	}
+
+	sortWidgetTasks(merged)
+	return merged, nil
 }
 
 func widgetParentProjectUUID(state widgetLookup, task *things.Task, seen map[string]struct{}) string {
@@ -131,69 +248,6 @@ func isOverdueOpenTask(task *things.Task, todayStart time.Time) bool {
 		task.ScheduledDate.Before(todayStart)
 }
 
-func sortOverdueTasks(tasks []*things.Task) {
-	sort.SliceStable(tasks, func(i, j int) bool {
-		left := tasks[i]
-		right := tasks[j]
-		switch {
-		case left == nil:
-			return false
-		case right == nil:
-			return true
-		case left.ScheduledDate == nil:
-			return false
-		case right.ScheduledDate == nil:
-			return true
-		case !left.ScheduledDate.Equal(*right.ScheduledDate):
-			return left.ScheduledDate.Before(*right.ScheduledDate)
-		case left.Index != right.Index:
-			return left.Index < right.Index
-		default:
-			return left.UUID < right.UUID
-		}
-	})
-}
-
-func widgetMergedTodayTasks(state *sync.State) ([]*things.Task, error) {
-	todayTasks, err := state.TasksInToday(sync.QueryOpts{})
-	if err != nil {
-		return nil, err
-	}
-
-	allTasks, err := state.AllTasks(sync.QueryOpts{})
-	if err != nil {
-		return nil, err
-	}
-
-	seen := make(map[string]struct{}, len(todayTasks))
-	for _, task := range todayTasks {
-		if task == nil {
-			continue
-		}
-		seen[task.UUID] = struct{}{}
-	}
-
-	todayStart := widgetTodayStartUTC()
-	overdue := make([]*things.Task, 0)
-	for _, task := range allTasks {
-		if task == nil || !isOverdueOpenTask(task, todayStart) {
-			continue
-		}
-		if _, ok := seen[task.UUID]; ok {
-			continue
-		}
-		seen[task.UUID] = struct{}{}
-		overdue = append(overdue, task)
-	}
-
-	sortOverdueTasks(overdue)
-
-	merged := make([]*things.Task, 0, len(overdue)+len(todayTasks))
-	merged = append(merged, overdue...)
-	merged = append(merged, todayTasks...)
-
-	return merged, nil
-}
 
 func paginateWidgetTodayItems(items []widgetTodayItem, opts sync.QueryOpts) []widgetTodayItem {
 	if opts.Offset >= len(items) {

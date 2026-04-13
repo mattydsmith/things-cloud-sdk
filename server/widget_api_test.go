@@ -52,6 +52,9 @@ func TestFormatWidgetTodayItem(t *testing.T) {
 		if item.IsCompleted {
 			t.Fatal("expected IsCompleted to be false")
 		}
+		if item.Deadline != "" {
+			t.Fatalf("Deadline = %q, want empty", item.Deadline)
+		}
 	})
 
 	t.Run("falls back to area title", func(t *testing.T) {
@@ -91,6 +94,22 @@ func TestFormatWidgetTodayItem(t *testing.T) {
 
 		if item.ProjectName != "" {
 			t.Fatalf("ProjectName = %q, want empty", item.ProjectName)
+		}
+	})
+
+	t.Run("includes formatted deadline when present", func(t *testing.T) {
+		t.Parallel()
+
+		deadline := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
+		item := formatWidgetTodayItem(stubWidgetLookup{}, &things.Task{
+			UUID:         "task-4",
+			Title:        "Has deadline",
+			Status:       things.TaskStatusPending,
+			DeadlineDate: &deadline,
+		})
+
+		if item.Deadline != "2026-04-13" {
+			t.Fatalf("Deadline = %q, want %q", item.Deadline, "2026-04-13")
 		}
 	})
 }
@@ -165,23 +184,52 @@ func TestPaginateWidgetTodayItems(t *testing.T) {
 	}
 }
 
-func TestSortOverdueTasks(t *testing.T) {
+func TestHasDueDeadline(t *testing.T) {
 	t.Parallel()
 
-	older := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	newer := time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC)
-	sameDay := time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC)
+	todayStart := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
+	tomorrowStart := todayStart.Add(24 * time.Hour)
+	todayDeadline := todayStart
+	oldDeadline := todayStart.Add(-24 * time.Hour)
+	futureDeadline := tomorrowStart
 
-	tasks := []*things.Task{
-		{UUID: "c", ScheduledDate: &newer, Index: 3},
-		{UUID: "a", ScheduledDate: &older, Index: 8},
-		{UUID: "b", ScheduledDate: &sameDay, Index: 1},
+	tests := []struct {
+		name string
+		task *things.Task
+		want bool
+	}{
+		{"deadline today", &things.Task{Status: things.TaskStatusPending, DeadlineDate: &todayDeadline}, true},
+		{"deadline overdue", &things.Task{Status: things.TaskStatusPending, DeadlineDate: &oldDeadline}, true},
+		{"deadline future", &things.Task{Status: things.TaskStatusPending, DeadlineDate: &futureDeadline}, false},
+		{"completed", &things.Task{Status: things.TaskStatusCompleted, DeadlineDate: &oldDeadline}, false},
+		{"none", &things.Task{Status: things.TaskStatusPending}, false},
 	}
 
-	sortOverdueTasks(tasks)
+	for _, tt := range tests {
+		if got := hasDueDeadline(tt.task, tomorrowStart); got != tt.want {
+			t.Fatalf("%s: hasDueDeadline() = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
 
-	got := []string{tasks[0].UUID, tasks[1].UUID, tasks[2].UUID}
-	want := []string{"a", "b", "c"}
+func TestSortWidgetTasks(t *testing.T) {
+	t.Parallel()
+
+	todayStart := time.Date(2026, 4, 13, 0, 0, 0, 0, time.UTC)
+	yesterday := todayStart.Add(-24 * time.Hour)
+	tomorrow := todayStart.Add(24 * time.Hour)
+
+	tasks := []*things.Task{
+		{UUID: "today", ScheduledDate: &todayStart, Index: 5, Status: things.TaskStatusPending},
+		{UUID: "overdue", ScheduledDate: &yesterday, Index: 1, Status: things.TaskStatusPending},
+		{UUID: "deadline-today", ScheduledDate: &todayStart, DeadlineDate: &todayStart, Index: 9, Status: things.TaskStatusPending},
+		{UUID: "deadline-overdue", ScheduledDate: &yesterday, DeadlineDate: &yesterday, Index: 7, Status: things.TaskStatusPending},
+		{UUID: "future-deadline", ScheduledDate: &todayStart, DeadlineDate: &tomorrow, Index: 0, Status: things.TaskStatusPending},
+	}
+
+	sortWidgetTasksAt(tasks, todayStart)
+	got := []string{tasks[0].UUID, tasks[1].UUID, tasks[2].UUID, tasks[3].UUID, tasks[4].UUID}
+	want := []string{"deadline-overdue", "deadline-today", "overdue", "future-deadline", "today"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("sorted UUIDs = %v, want %v", got, want)

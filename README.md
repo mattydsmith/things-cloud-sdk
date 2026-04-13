@@ -205,7 +205,7 @@ See **[docs/endpoints-and-things-cloud.md](docs/endpoints-and-things-cloud.md)**
 | `GET /api/tasks/anytime` | Tasks in Anytime. Optional query params: `limit`, `offset` |
 | `GET /api/tasks/someday` | Tasks in Someday. Optional query params: `limit`, `offset` |
 | `GET /api/tasks/upcoming` | Tasks in Upcoming. Optional query params: `limit`, `offset` |
-| `GET /api/widget/today` | Compact Today-view payload for widgets: `uuid`, `title`, `projectName`, `isCompleted` |
+| `GET /api/widget/today` | Compact Today-view payload for widgets: `uuid`, `title`, `projectName`, `isCompleted`, optional `deadline` |
 | `GET /api/projects` | All projects. Optional query params: `limit`, `offset` |
 | `GET /api/areas` | All areas. Optional query params: `limit`, `offset` |
 | `GET /api/tags` | All tags. Optional query params: `limit`, `offset` |
@@ -222,7 +222,8 @@ Example widget payload:
     "uuid": "CoLoz6a9eaMAj99FQ6guo9",
     "title": "Sort out HBO Max and sky",
     "projectName": "Home",
-    "isCompleted": false
+    "isCompleted": false,
+    "deadline": "2026-04-13"
   }
 ]
 ```
@@ -230,7 +231,8 @@ Example widget payload:
 Widget Today behavior:
 
 - returns a compact Today-view payload for widgets
-- orders overdue open tasks first, oldest scheduled date first
+- returns tasks with deadlines due today or overdue first, oldest deadline first
+- then returns overdue open tasks, oldest scheduled date first
 - then returns tasks due today
 - excludes tasks under the `☀️ Routines` project, including tasks attached through headings/action groups
 
