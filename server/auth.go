@@ -145,6 +145,21 @@ func authHandlerMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func bearerOnlyAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		secret := resolveAuthSecret()
+		if secret == "" {
+			next(w, r)
+			return
+		}
+		if !requestHasBearerAuth(r, secret) {
+			jsonError(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
+}
+
 func debugAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if os.Getenv("DEBUG") != "true" {

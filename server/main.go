@@ -342,6 +342,8 @@ func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks/{uuid}", authMiddleware(handleTaskByUUID))
 	mux.HandleFunc("GET /api/tasks/{uuid}/checklist", authMiddleware(handleTaskChecklist))
 	mux.HandleFunc("GET /api/widget/today", authMiddleware(handleWidgetToday))
+	mux.HandleFunc("PUT /briefing/daily/{date}", bearerOnlyAuthMiddleware(handlePutDailyBriefing))
+	mux.HandleFunc("PUT /briefing/weekly/{week}", bearerOnlyAuthMiddleware(handlePutWeeklyBriefing))
 
 	mux.HandleFunc("POST /api/tasks/create", authMiddleware(handleCreateTask))
 	mux.HandleFunc("POST /api/tasks/complete", authMiddleware(handleCompleteTask))
@@ -478,7 +480,7 @@ func main() {
 	client.Debug = os.Getenv("DEBUG") == "true"
 
 	var err error
-	syncer, err = sync.Open("/data/things.db", client)
+	syncer, err = sync.Open(thingsDBPath, client)
 	if err != nil {
 		log.Fatalf("failed to open sync database: %v", err)
 	}

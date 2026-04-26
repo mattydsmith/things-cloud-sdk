@@ -196,6 +196,234 @@ func mcpPaginationOpts(req mcp.CallToolRequest) (sync.QueryOpts, error) {
 	return opts, nil
 }
 
+type reviewGuidance struct {
+	Basis             string   `json:"basis"`
+	Timezone          string   `json:"timezone"`
+	ReviewType        string   `json:"review_type"`
+	ConversationGoal  string   `json:"conversation_goal"`
+	TagPolicy         []string `json:"tag_policy"`
+	OpeningChecklist  []string `json:"opening_checklist"`
+	ConversationSteps []string `json:"conversation_steps"`
+	MustCallOut       []string `json:"must_call_out"`
+	Avoid             []string `json:"avoid"`
+	MonthlyReview     []string `json:"monthly_review"`
+	FeedbackPrompt    string   `json:"feedback_prompt"`
+	RequestFeedback   bool     `json:"request_feedback"`
+}
+
+func guidanceForReview(kind string) reviewGuidance {
+	base := reviewGuidance{
+		Basis:           "Distilled from Matt's productivity instruction files for Claude co-work",
+		Timezone:        "Europe/London",
+		FeedbackPrompt:  "Was this review useful? What was missing, overemphasized, or annoying?",
+		RequestFeedback: true,
+		TagPolicy: []string{
+			"Use exactly one horizon tag where possible: Now, Next, or Later.",
+			"Use at most one context tag: Work or Personal.",
+			"Now means committed within the next week; Next means the following 2-3 weeks; Later means after that.",
+			"Mini means under 15 minutes and does not need anybody else involved.",
+			"Deep means over an hour and should be limited on meeting-heavy days.",
+			"AI means Claude or another GenAI tool can likely help execute the task.",
+			"If suggesting a task for today or this week, prefer Now over Next.",
+		},
+		MonthlyReview: []string{
+			"Monthly review should audit Later-tagged tasks for promote, keep, rewrite, or drop.",
+			"Long-overdue tasks are rewrite candidates before they are simple reschedule candidates.",
+		},
+	}
+	switch kind {
+	case "weekly":
+		base.ReviewType = "weekly"
+		base.ConversationGoal = "Run a practical weekly review that reflects on last week, checks system health, and plans the next week realistically against calendar load."
+		base.OpeningChecklist = []string{
+			"Use Europe/London throughout.",
+			"Start with reflection: calendar, completed tasks, and what actually got done.",
+			"Treat the weekly buckets in order: Upcoming, Anytime, Someday, Projects, Now without dates.",
+			"Use the project_health, stale_projects, and tag_audit sections to identify projects without a clear next action and broken tag discipline.",
+		}
+		base.ConversationSteps = []string{
+			"Summarize last week's completions and standout areas.",
+			"Call out rollovers, stale projects, unscheduled Now tasks, and tag-policy mismatches.",
+			"Review upcoming week calendar and deadline-heavy days before suggesting commitments.",
+			"End by asking whether to schedule focus time or make any project/task changes.",
+			"Always ask for feedback at the end of the review.",
+		}
+		base.MustCallOut = []string{
+			"Flag days with 3+ hard deadlines or obvious overload.",
+			"Flag projects without a clear next action.",
+			"Flag Now-tagged tasks without dates.",
+			"Flag missing or conflicting Now/Next/Later and Work/Personal tags.",
+			"Call out Later-tagged tasks that should be reconsidered in monthly review.",
+			"Mention if either calendar appears empty when calendar feeds are configured.",
+		}
+		base.Avoid = []string{
+			"Do not switch into a daily-review style triage flow.",
+			"Do not deep-audit every Next/Later task unless explicitly asked.",
+			"Do not suggest reorganising project structure unless asked.",
+		}
+		return base
+	default:
+		base.ReviewType = "daily"
+		base.ConversationGoal = "Run a tight morning review: orient to today's reality, surface overload or stale items, and help choose what to focus on next."
+		base.OpeningChecklist = []string{
+			"Use Europe/London throughout.",
+			"Start with calendar check-in and event counts by calendar when available.",
+			"Anchor on today_tasks, recent overdue items, upcoming_lookahead, now_without_dates, inbox, and tag_signals.",
+			"Use completed_today to acknowledge wins before planning the day.",
+		}
+		base.ConversationSteps = []string{
+			"Summarize today's commitments and calendar pressure first.",
+			"Highlight overdue items from Anytime and ask whether to reschedule or tackle them today.",
+			"Use capacity_assessment and tag_signals to sanity-check whether the day is realistic.",
+			"Offer inbox triage or focused prioritisation next, not both at once.",
+			"Always ask for feedback at the end of the review.",
+		}
+		base.MustCallOut = []string{
+			"Flag any Now-tagged tasks without dates.",
+			"Flag deadline-heavy days using the 2-3 hard deadline rule.",
+			"Flag meeting-heavy days with too many Deep tasks.",
+			"Suggest AI where execution looks Claude-suitable and the task is not already tagged AI.",
+			"Mention if either calendar appears empty when calendar feeds are configured.",
+			"Call out stale today tasks and obvious overload.",
+		}
+		base.Avoid = []string{
+			"Do not deep-scan very old tasks in a daily review.",
+			"Do not use total task count alone as overload; use calendar load and deadline density.",
+			"Do not include routine housekeeping tasks as meaningful priorities.",
+		}
+		return base
+	}
+}
+
+func reviewEnvelope(kind, key string, fromCache bool, briefing any) map[string]any {
+	return map[string]any{
+		"review_type":      kind,
+		"target_key":       key,
+		"from_cache":       fromCache,
+		"briefing":         briefing,
+		"guidance":         guidanceForReview(kind),
+		"feedback_prompt":  guidanceForReview(kind).FeedbackPrompt,
+		"request_feedback": true,
+	}
+}
+
+func resolveFeedbackTarget(req mcp.CallToolRequest) (string, string, error) {
+	week := strings.TrimSpace(req.GetString("week", ""))
+	date := strings.TrimSpace(req.GetString("date", ""))
+	reviewType := strings.TrimSpace(req.GetString("review_type", ""))
+
+	switch reviewType {
+	case "", "daily", "weekly":
+	default:
+		return "", "", fmt.Errorf("review_type must be 'daily' or 'weekly'")
+	}
+
+	if week != "" {
+		if _, err := parseISOWeek(week); err != nil {
+			return "", "", err
+		}
+		return "weekly", week, nil
+	}
+	if date != "" {
+		parsed, err := parseBriefingDate(date)
+		if err != nil {
+			return "", "", err
+		}
+		return "daily", parsed.Format("2006-01-02"), nil
+	}
+	now := time.Now().UTC()
+	kind, key := reviewTargetForDate(now)
+	if reviewType == "daily" {
+		return "daily", utcDay(now).Format("2006-01-02"), nil
+	}
+	if reviewType == "weekly" {
+		return "weekly", key, nil
+	}
+	return kind, key, nil
+}
+
+func mcpReview(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	rawDate := strings.TrimSpace(req.GetString("date", ""))
+	targetDate := time.Now().UTC()
+	if rawDate != "" {
+		parsed, err := parseBriefingDate(rawDate)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		targetDate = parsed
+	}
+
+	kind, key := reviewTargetForDate(targetDate)
+	service := newBriefingService()
+
+	switch kind {
+	case "weekly":
+		briefing, err := service.GenerateWeekly(ctx, key)
+		if err == nil {
+			return jsonToolResultWithIndent(reviewEnvelope(kind, key, false, briefing), true), nil
+		}
+		cached, cacheErr := readCachedBriefing(kind, key)
+		if cacheErr == nil {
+			return jsonToolResultWithIndent(reviewEnvelope(kind, key, true, cached), true), nil
+		}
+		return mcp.NewToolResultError(fmt.Sprintf("live weekly review failed: %v", err)), nil
+	default:
+		briefing, err := service.GenerateDaily(ctx, targetDate)
+		if err == nil {
+			return jsonToolResultWithIndent(reviewEnvelope(kind, key, false, briefing), true), nil
+		}
+		cached, cacheErr := readCachedBriefing(kind, key)
+		if cacheErr == nil {
+			return jsonToolResultWithIndent(reviewEnvelope(kind, key, true, cached), true), nil
+		}
+		return mcp.NewToolResultError(fmt.Sprintf("live daily review failed: %v", err)), nil
+	}
+}
+
+func mcpReviewFeedback(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	feedback := strings.TrimSpace(req.GetString("feedback", ""))
+	if feedback == "" {
+		return mcp.NewToolResultError("feedback is required"), nil
+	}
+	reviewType, targetKey, err := resolveFeedbackTarget(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	store := newBriefingStore(resolveBriefingDBPath(), time.Now)
+	entry, err := store.writeReviewFeedback(reviewFeedbackEntry{
+		ReviewType: reviewType,
+		TargetKey:  targetKey,
+		IssueType:  req.GetString("issue_type", ""),
+		Feedback:   feedback,
+		Expected:   req.GetString("expected", ""),
+		Actual:     req.GetString("actual", ""),
+		Source:     fallbackString(strings.TrimSpace(req.GetString("source", "")), "claude"),
+	})
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to store review feedback: %v", err)), nil
+	}
+	return jsonToolResultWithIndent(map[string]any{
+		"status":      "recorded",
+		"feedback_id": entry.ID,
+		"review_type": entry.ReviewType,
+		"target_key":  entry.TargetKey,
+	}, true), nil
+}
+
+func mcpListReviewFeedback(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	reviewType := strings.TrimSpace(req.GetString("review_type", ""))
+	if reviewType != "" && reviewType != "daily" && reviewType != "weekly" {
+		return mcp.NewToolResultError("review_type must be 'daily' or 'weekly'"), nil
+	}
+	store := newBriefingStore(resolveBriefingDBPath(), time.Now)
+	entries, err := store.listReviewFeedback(req.GetInt("limit", 20), reviewType)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to list review feedback: %v", err)), nil
+	}
+	return jsonToolResultWithIndent(entries, true), nil
+}
+
 // ---------------------------------------------------------------------------
 // Read tool handlers
 // ---------------------------------------------------------------------------
@@ -888,6 +1116,54 @@ func newMCPHandler() http.Handler {
 	s := server.NewMCPServer("Things Cloud", "1.1.0")
 
 	// --- Read tools ---
+
+	s.AddTool(mcp.NewTool("review",
+		mcp.WithDescription("Run a live daily or weekly review scan, write the result to the local briefing cache, and return both the briefing data and Claude guidance for how to conduct the review. Weekdays produce a daily briefing; Saturdays and Sundays produce the upcoming week's weekly briefing. If the live scan fails, the latest cached briefing for that target is returned as fallback."),
+		mcp.WithString("date",
+			mcp.Description("Optional YYYY-MM-DD date override. Defaults to today."),
+		),
+	), mcpReview)
+
+	s.AddTool(mcp.NewTool("review_feedback",
+		mcp.WithDescription("Record feedback about a review experience so the briefing logic and Claude guidance can be improved over time. Use this when the user says what was missing, overemphasized, confusing, or annoying."),
+		mcp.WithString("feedback",
+			mcp.Required(),
+			mcp.Description("The user's feedback in plain language."),
+		),
+		mcp.WithString("review_type",
+			mcp.Description("Optional review type: 'daily' or 'weekly'. If omitted, the target is inferred from date/week or today's default review mode."),
+		),
+		mcp.WithString("date",
+			mcp.Description("Optional YYYY-MM-DD daily review target."),
+		),
+		mcp.WithString("week",
+			mcp.Description("Optional YYYY-Www weekly review target."),
+		),
+		mcp.WithString("issue_type",
+			mcp.Description("Optional short category such as missing_context, bad_prioritisation, too_verbose, calendar_gap, or instruction_gap."),
+		),
+		mcp.WithString("expected",
+			mcp.Description("Optional note about what the user expected instead."),
+		),
+		mcp.WithString("actual",
+			mcp.Description("Optional note about what Claude actually did."),
+		),
+		mcp.WithString("source",
+			mcp.Description("Optional source label. Defaults to 'claude'."),
+		),
+	), mcpReviewFeedback)
+
+	s.AddTool(mcp.NewTool("list_review_feedback",
+		mcp.WithDescription("List recent recorded review feedback so patterns can be inspected and the briefing system or instructions can be improved."),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithNumber("limit",
+			mcp.Description("Maximum number of feedback entries to return. Defaults to 20."),
+			mcp.Min(1),
+		),
+		mcp.WithString("review_type",
+			mcp.Description("Optional review type filter: 'daily' or 'weekly'."),
+		),
+	), mcpListReviewFeedback)
 
 	s.AddTool(mcp.NewTool("things_list_today",
 		mcp.WithDescription("List tasks scheduled for today in Things"),
