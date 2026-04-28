@@ -75,6 +75,9 @@ func forwardOnce(ctx context.Context, syncer *sync.Syncer, target ForwardTarget)
 			if err := postRow(ctx, httpClient, target, row); err != nil {
 				return ForwardReport{Forwarded: forwarded, Cursor: cursor}, fmt.Errorf("post change_log id=%d: %w", row.ID, err)
 			}
+			// If postRow succeeded but SetForwardCursor fails, the next forwardOnce
+			// will re-POST this row. things-plus accepts duplicates (no source-side
+			// dedup); see plan TD-1. Acceptable at our volume.
 			if err := syncer.SetForwardCursor(row.ID); err != nil {
 				return ForwardReport{Forwarded: forwarded, Cursor: cursor}, fmt.Errorf("advance cursor to %d: %w", row.ID, err)
 			}
@@ -168,7 +171,7 @@ func RunForwardLoop(ctx context.Context, syncer *sync.Syncer, target ForwardTarg
 				return
 			}
 			log.Printf("[FORWARD] forwardOnce error after %d rows (cursor=%d): %v", report.Forwarded, report.Cursor, err)
-		} else if report.Forwarded > 0 {
+		} else {
 			log.Printf("[FORWARD] forwarded %d rows; cursor=%d", report.Forwarded, report.Cursor)
 		}
 
