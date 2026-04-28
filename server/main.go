@@ -563,6 +563,27 @@ func main() {
 	defer stop()
 	server := &http.Server{Addr: ":" + port}
 
+	// Start the things-plus forwarder if configured. Opt-in: if THINGS_PLUS_EVENTS_URL
+	// is unset, the SDK runs exactly as before.
+	if url := os.Getenv("THINGS_PLUS_EVENTS_URL"); url != "" {
+		token := os.Getenv("THINGS_PLUS_AUTH_TOKEN")
+		if token == "" {
+			log.Fatal("THINGS_PLUS_EVENTS_URL is set but THINGS_PLUS_AUTH_TOKEN is empty")
+		}
+		target := ForwardTarget{
+			URL:          url,
+			AuthToken:    token,
+			BatchSize:    defaultBatchSize,
+			IdleInterval: defaultIdleInterval,
+		}
+		go RunForwardLoop(shutdownCtx, syncer, target, func() error {
+			_, err := syncer.Sync()
+			return err
+		})
+	} else {
+		log.Println("[FORWARD] THINGS_PLUS_EVENTS_URL not set; forwarder disabled")
+	}
+
 	log.Printf("Starting server on :%s", port)
 	if err := serveWithGracefulShutdown(shutdownCtx, server, shutdownTimeout); err != nil {
 		log.Fatal(err)
