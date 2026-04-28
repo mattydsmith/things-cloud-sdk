@@ -307,3 +307,71 @@ func (s *Syncer) getServerIndex() (int, error) {
 	}
 	return h.LatestServerIndex, nil
 }
+
+// ChangeLogRow is a raw row from the change_log table, preserving the payload
+// JSON so external consumers (e.g. an event-store forwarder) can relay it
+// without going through the typed Change interface (which drops the payload).
+type ChangeLogRow struct {
+	ID          int64     `json:"id"`
+	ServerIndex int       `json:"server_index"`
+	SyncedAt    time.Time `json:"synced_at"`
+	ChangeType  string    `json:"change_type"`
+	EntityType  string    `json:"entity_type"`
+	EntityUUID  string    `json:"entity_uuid"`
+	Payload     string    `json:"payload"` // raw JSON; empty string if NULL
+}
+
+// RawChangesSinceID returns change_log rows with id strictly greater than
+// sinceID, ordered by id ascending, capped at limit. limit <= 0 means no cap.
+//
+// id (the AUTOINCREMENT column) is the canonical cursor for forwarding because
+// it is strictly monotonic in insertion order; server_index can have repeats
+// across batches in edge cases and is not safe as a cursor.
+func (s *Syncer) RawChangesSinceID(sinceID int64, limit int) ([]ChangeLogRow, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	q := `
+		SELECT id, server_index, synced_at, change_type, entity_type, entity_uuid, payload
+		FROM change_log
+		WHERE id > ?
+		ORDER BY id ASC
+	`
+	args := []any{sinceID}
+	if limit > 0 {
+		q += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := s.rawDB.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ChangeLogRow
+	for rows.Next() {
+		var r ChangeLogRow
+		var syncedAt int64
+		var payload sql.NullString
+		if err := rows.Scan(&r.ID, &r.ServerIndex, &syncedAt, &r.ChangeType, &r.EntityType, &r.EntityUUID, &payload); err != nil {
+			return nil, err
+		}
+		r.SyncedAt = time.Unix(syncedAt, 0).UTC()
+		if payload.Valid {
+			r.Payload = payload.String
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// LogChangeForTest exposes logChange to test code in other packages (e.g.
+// server/forwarder_test.go in Task 3). Production code must not use this.
+func (s *Syncer) LogChangeForTest(serverIndex int, changeType, entityType, entityUUID, payload string) error {
+	_, err := s.rawDB.Exec(`
+		INSERT INTO change_log (server_index, synced_at, change_type, entity_type, entity_uuid, payload)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, serverIndex, time.Now().Unix(), changeType, entityType, entityUUID, payload)
+	return err
+}

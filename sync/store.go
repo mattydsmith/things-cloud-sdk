@@ -2,6 +2,7 @@ package sync
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	things "github.com/arthursoares/things-cloud-sdk"
@@ -430,4 +431,61 @@ func (s *Syncer) purgeDeleted() error {
 		}
 	}
 	return nil
+}
+
+// GetForwardCursor returns the highest change_log.id that has been forwarded
+// to things-plus, or 0 if forwarding has never run.
+//
+// Unlike sibling getSyncState (which uses s.db and assumes the caller holds
+// s.mu via Sync()), this accessor uses s.rawDB and takes its own RLock. That's
+// because the forwarder loop calls it from outside the package and never holds
+// s.mu. Don't "fix" the asymmetry by switching to s.db — Sync() doesn't drive
+// these callers, so there's no caller-held lock to inherit.
+func (s *Syncer) GetForwardCursor() (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var cursor int64
+	err := s.rawDB.QueryRow(`
+		SELECT forwarded_change_log_id FROM forward_state WHERE id = 1
+	`).Scan(&cursor)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return cursor, nil
+}
+
+// SetForwardCursor advances the forward cursor. Refuses to move it backwards;
+// the caller (forwarder loop) is the only writer and only ever advances.
+//
+// s.mu serialises in-process callers only. The plan's documented "reset cursor"
+// admin procedure (UPDATE forward_state SET forwarded_change_log_id = 0 via
+// sqlite3 on the Fly machine) bypasses this lock by design — it's intentional
+// out-of-band recovery, not a race the forwarder needs to defend against.
+func (s *Syncer) SetForwardCursor(newCursor int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var current int64
+	err := s.rawDB.QueryRow(`
+		SELECT forwarded_change_log_id FROM forward_state WHERE id = 1
+	`).Scan(&current)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if newCursor < current {
+		return fmt.Errorf("forward cursor cannot move backwards: current=%d, refused=%d", current, newCursor)
+	}
+
+	_, err = s.rawDB.Exec(`
+		INSERT INTO forward_state (id, forwarded_change_log_id, last_forward_at)
+		VALUES (1, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			forwarded_change_log_id = excluded.forwarded_change_log_id,
+			last_forward_at = excluded.last_forward_at
+	`, newCursor, time.Now().Unix())
+	return err
 }
