@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/arthursoares/things-cloud-sdk/sync"
 )
@@ -193,10 +192,4 @@ func TestForwardOnce_RespectsContextCancellation(t *testing.T) {
 	if err == nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
-}
-
-// Ensure RunForwardLoop is importable / compiles (smoke test only; no goroutine leak).
-var _ = func() {
-	_ = RunForwardLoop
-	_ = time.Second // prevent unused import if test file is the only importer
 }
