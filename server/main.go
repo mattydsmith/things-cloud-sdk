@@ -353,6 +353,8 @@ func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/tasks/remove-from-today", authMiddleware(handleRemoveTaskFromToday))
 	mux.HandleFunc("POST /api/tasks/move-to-anytime", authMiddleware(handleMoveTaskToAnytime))
 
+	mux.HandleFunc("GET /api/calendar/events", authMiddleware(handleCalendarEvents))
+
 	mux.HandleFunc("GET /api/debug/history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		items, err := history.RawItems()
 		if err != nil {
