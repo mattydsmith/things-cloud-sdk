@@ -748,7 +748,10 @@ func (p *icsCalendarProvider) WeeklySummary(ctx context.Context, start, end time
 
 type renderedCalendarEvent struct {
 	dailyCalendarEvent
-	DateKey string
+	DateKey   string
+	StartTime time.Time
+	EndTime   time.Time
+	AllDay    bool
 }
 
 type timeInterval struct {
@@ -977,7 +980,10 @@ func renderCalendarEvents(data *icsCalendarData, expandStart, expandEnd, include
 					PrepNeeded: needsPrep(occurrence.Summary),
 					PrepNote:   prepNote(occurrence.Summary),
 				},
-				DateKey: localDate.Format("2006-01-02"),
+				DateKey:   localDate.Format("2006-01-02"),
+				StartTime: occurrence.Start.UTC(),
+				EndTime:   occurrence.End.UTC(),
+				AllDay:    occurrence.AllDay,
 			})
 		}
 	}
