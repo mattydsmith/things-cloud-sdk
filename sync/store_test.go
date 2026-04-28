@@ -677,3 +677,56 @@ func TestLogChange(t *testing.T) {
 		}
 	})
 }
+
+func TestForwardCursorRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	syncer, err := Open(":memory:", nil)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer syncer.Close()
+
+	t.Run("default cursor is 0", func(t *testing.T) {
+		got, err := syncer.GetForwardCursor()
+		if err != nil {
+			t.Fatalf("GetForwardCursor failed: %v", err)
+		}
+		if got != 0 {
+			t.Fatalf("default cursor = %d, want 0", got)
+		}
+	})
+
+	t.Run("set then get", func(t *testing.T) {
+		if err := syncer.SetForwardCursor(42); err != nil {
+			t.Fatalf("SetForwardCursor(42) failed: %v", err)
+		}
+		got, err := syncer.GetForwardCursor()
+		if err != nil {
+			t.Fatalf("GetForwardCursor failed: %v", err)
+		}
+		if got != 42 {
+			t.Fatalf("cursor = %d, want 42", got)
+		}
+	})
+
+	t.Run("upsert (set twice)", func(t *testing.T) {
+		if err := syncer.SetForwardCursor(100); err != nil {
+			t.Fatalf("SetForwardCursor(100) failed: %v", err)
+		}
+		got, _ := syncer.GetForwardCursor()
+		if got != 100 {
+			t.Fatalf("cursor = %d, want 100", got)
+		}
+	})
+
+	t.Run("rejects backwards step", func(t *testing.T) {
+		if err := syncer.SetForwardCursor(50); err == nil {
+			t.Fatal("expected error for backwards step, got nil")
+		}
+		got, _ := syncer.GetForwardCursor()
+		if got != 100 {
+			t.Fatalf("cursor after rejected backwards step = %d, want 100", got)
+		}
+	})
+}
