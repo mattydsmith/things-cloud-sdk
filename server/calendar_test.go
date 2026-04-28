@@ -22,6 +22,19 @@ END:VEVENT
 END:VCALENDAR
 `
 
+// canned ICS with one all-day VEVENT on 2026-04-28
+const testICSAllDay = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//test//
+BEGIN:VEVENT
+UID:test-event-allday
+SUMMARY:All Day Event
+DTSTART;VALUE=DATE:20260428
+DTEND;VALUE=DATE:20260429
+END:VEVENT
+END:VCALENDAR
+`
+
 // clearCalendarEnv wipes all CALENDAR_N env vars so each test starts clean.
 func clearCalendarEnv(t *testing.T) {
 	t.Helper()
@@ -121,11 +134,55 @@ func TestCalendarEvents_ReturnsEventsFromFeed(t *testing.T) {
 	if len(resp.Events) == 0 {
 		t.Fatal("expected at least one event, got 0")
 	}
-	if got, want := resp.Events[0].Title, "Test Meeting"; got != want {
+	ev := resp.Events[0]
+	if got, want := ev.Title, "Test Meeting"; got != want {
 		t.Fatalf("Events[0].Title = %q, want %q", got, want)
 	}
-	if resp.Events[0].Start == "" {
-		t.Fatal("Events[0].Start should not be empty")
+	if got, want := ev.Start, "2026-04-28T09:00:00Z"; got != want {
+		t.Fatalf("Events[0].Start = %q, want %q", got, want)
+	}
+	if got, want := ev.End, "2026-04-28T09:30:00Z"; got != want {
+		t.Fatalf("Events[0].End = %q, want %q", got, want)
+	}
+	if ev.AllDay != false {
+		t.Fatalf("Events[0].AllDay = %v, want false", ev.AllDay)
+	}
+}
+
+func TestCalendarEvents_AllDayEvent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/calendar")
+		fmt.Fprint(w, testICSAllDay)
+	}))
+	defer srv.Close()
+
+	clearCalendarEnv(t)
+	t.Setenv("CALENDAR_1_ICS_URL", srv.URL+"/cal.ics")
+	t.Setenv("CALENDAR_1_NAME", "Personal")
+
+	w := doGet(t, "2026-04-28T00:00:00Z", "2026-04-29T00:00:00Z")
+	if got, want := w.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d; body: %s", got, want, w.Body.String())
+	}
+	var resp CalendarEventsResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Events) == 0 {
+		t.Fatal("expected at least one event, got 0")
+	}
+	ev := resp.Events[0]
+	if got, want := ev.Title, "All Day Event"; got != want {
+		t.Fatalf("Events[0].Title = %q, want %q", got, want)
+	}
+	if got, want := ev.Start, "2026-04-28T00:00:00Z"; got != want {
+		t.Fatalf("Events[0].Start = %q, want %q (expected start-of-day UTC)", got, want)
+	}
+	if got, want := ev.End, "2026-04-29T00:00:00Z"; got != want {
+		t.Fatalf("Events[0].End = %q, want %q (expected exclusive next-day UTC)", got, want)
+	}
+	if ev.AllDay != true {
+		t.Fatalf("Events[0].AllDay = %v, want true", ev.AllDay)
 	}
 }
 

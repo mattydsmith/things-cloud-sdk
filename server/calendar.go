@@ -12,8 +12,9 @@ const maxCalendarWindow = 90 * 24 * time.Hour
 // PrepNeeded and PrepNote from dailyCalendarEvent are intentionally omitted.
 type CalendarEvent struct {
 	Title    string `json:"title"`
-	Start    string `json:"start"`
-	End      string `json:"end"`
+	Start    string `json:"start"`    // RFC 3339, UTC
+	End      string `json:"end"`      // RFC 3339, UTC
+	AllDay   bool   `json:"all_day"`
 	Calendar string `json:"calendar"`
 	Location string `json:"location"`
 }
@@ -65,8 +66,9 @@ func handleCalendarEvents(w http.ResponseWriter, r *http.Request) {
 	for _, e := range events {
 		resp.Events = append(resp.Events, CalendarEvent{
 			Title:    e.Title,
-			Start:    e.Start,
-			End:      e.End,
+			Start:    e.StartTime.Format(time.RFC3339),
+			End:      e.EndTime.Format(time.RFC3339),
+			AllDay:   e.AllDay,
 			Calendar: e.Calendar,
 			Location: e.Location,
 		})
