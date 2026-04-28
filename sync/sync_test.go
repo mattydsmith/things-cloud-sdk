@@ -216,3 +216,71 @@ func TestReadQueriesWaitForSyncLock(t *testing.T) {
 		t.Fatal("ChangesSinceIndex did not resume after lock release")
 	}
 }
+
+func TestRawChangesSinceID(t *testing.T) {
+	t.Parallel()
+
+	syncer, err := Open(":memory:", nil)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer syncer.Close()
+
+	change := TaskCreated{
+		taskChange: taskChange{
+			baseChange: baseChange{serverIndex: 100, timestamp: time.Now()},
+			Task:       &things.Task{UUID: "task-uuid-1", Title: "T"},
+		},
+	}
+	if err := syncer.logChange(100, change, `{"tt":1,"e":{"tp":0,"tt":"T"}}`); err != nil {
+		t.Fatalf("logChange failed: %v", err)
+	}
+	if err := syncer.logChange(101, change, `{"tt":1,"e":{"tp":0,"tt":"T2"}}`); err != nil {
+		t.Fatalf("logChange failed: %v", err)
+	}
+
+	rows, err := syncer.RawChangesSinceID(0, 100)
+	if err != nil {
+		t.Fatalf("RawChangesSinceID failed: %v", err)
+	}
+	if got, want := len(rows), 2; got != want {
+		t.Fatalf("len(rows) = %d, want %d", got, want)
+	}
+	if rows[0].ID == 0 {
+		t.Fatal("rows[0].ID should be the AUTOINCREMENT id, got 0")
+	}
+	if rows[0].ID >= rows[1].ID {
+		t.Fatalf("rows must be ordered by id ASC: rows[0].ID=%d rows[1].ID=%d", rows[0].ID, rows[1].ID)
+	}
+	if got, want := rows[0].ChangeType, "TaskCreated"; got != want {
+		t.Fatalf("rows[0].ChangeType = %q, want %q", got, want)
+	}
+	if got, want := rows[0].EntityType, "Task"; got != want {
+		t.Fatalf("rows[0].EntityType = %q, want %q", got, want)
+	}
+	if got, want := rows[0].EntityUUID, "task-uuid-1"; got != want {
+		t.Fatalf("rows[0].EntityUUID = %q, want %q", got, want)
+	}
+	if rows[0].Payload == "" {
+		t.Fatal("rows[0].Payload should not be empty")
+	}
+
+	limited, err := syncer.RawChangesSinceID(0, 1)
+	if err != nil {
+		t.Fatalf("RawChangesSinceID with limit failed: %v", err)
+	}
+	if got, want := len(limited), 1; got != want {
+		t.Fatalf("limited len(rows) = %d, want %d", got, want)
+	}
+
+	exclusive, err := syncer.RawChangesSinceID(rows[0].ID, 100)
+	if err != nil {
+		t.Fatalf("RawChangesSinceID (exclusive) failed: %v", err)
+	}
+	if got, want := len(exclusive), 1; got != want {
+		t.Fatalf("exclusive len(rows) = %d, want %d", got, want)
+	}
+	if got, want := exclusive[0].ID, rows[1].ID; got != want {
+		t.Fatalf("exclusive[0].ID = %d, want %d", got, want)
+	}
+}
