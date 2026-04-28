@@ -322,11 +322,11 @@ func newICSCalendarProvider(feeds []icsCalendarFeed) *icsCalendarProvider {
 }
 
 func resolveICSCalendarFeeds() []icsCalendarFeed {
-	feeds := make([]icsCalendarFeed, 0, 2)
-	for i := 1; i <= 2; i++ {
+	feeds := make([]icsCalendarFeed, 0)
+	for i := 1; i <= 10; i++ {
 		url := strings.TrimSpace(os.Getenv(fmt.Sprintf("CALENDAR_%d_ICS_URL", i)))
 		if url == "" {
-			continue
+			break
 		}
 		feeds = append(feeds, icsCalendarFeed{
 			URL:   url,
