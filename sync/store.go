@@ -435,6 +435,12 @@ func (s *Syncer) purgeDeleted() error {
 
 // GetForwardCursor returns the highest change_log.id that has been forwarded
 // to things-plus, or 0 if forwarding has never run.
+//
+// Unlike sibling getSyncState (which uses s.db and assumes the caller holds
+// s.mu via Sync()), this accessor uses s.rawDB and takes its own RLock. That's
+// because the forwarder loop calls it from outside the package and never holds
+// s.mu. Don't "fix" the asymmetry by switching to s.db — Sync() doesn't drive
+// these callers, so there's no caller-held lock to inherit.
 func (s *Syncer) GetForwardCursor() (int64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -454,6 +460,11 @@ func (s *Syncer) GetForwardCursor() (int64, error) {
 
 // SetForwardCursor advances the forward cursor. Refuses to move it backwards;
 // the caller (forwarder loop) is the only writer and only ever advances.
+//
+// s.mu serialises in-process callers only. The plan's documented "reset cursor"
+// admin procedure (UPDATE forward_state SET forwarded_change_log_id = 0 via
+// sqlite3 on the Fly machine) bypasses this lock by design — it's intentional
+// out-of-band recovery, not a race the forwarder needs to defend against.
 func (s *Syncer) SetForwardCursor(newCursor int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
