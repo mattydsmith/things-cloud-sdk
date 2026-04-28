@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ting — Work</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #FAF9F7;
+    --surface: #F3F1ED;
+    --border: #E5E1DB;
+    --text-primary: #2C2C2C;
+    --text-secondary: #8A8580;
+    --text-tertiary: #B5B0A9;
+    --accent: #C4704B;
+    --accent-hover: #A85A38;
+    --success: #7A9B7A;
+    --danger: #C47070;
+    --sidebar-width: 240px;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sidebar {
+    width: var(--sidebar-width);
+    min-height: 100vh;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 32px 0;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+  }
+  .sidebar-brand { padding: 0 24px; margin-bottom: 40px; }
+  .sidebar-brand h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  .sidebar-section { margin-bottom: 4px; }
+  .sidebar-section-title {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-tertiary);
+    padding: 0 24px; margin-bottom: 8px;
+  }
+  .sidebar-nav { list-style: none; }
+  .sidebar-nav li { position: relative; }
+  .sidebar-nav a {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 24px; font-size: 14px; font-weight: 400;
+    color: var(--text-secondary); text-decoration: none;
+    transition: background 100ms ease, color 100ms ease; cursor: pointer;
+  }
+  .sidebar-nav a:hover { background: rgba(0,0,0,0.03); color: var(--text-primary); }
+  .sidebar-nav a.active { color: var(--text-primary); font-weight: 500; }
+  .sidebar-nav a.active::before {
+    content: ''; position: absolute; left: 0; top: 4px; bottom: 4px;
+    width: 3px; background: var(--accent); border-radius: 0 2px 2px 0;
+  }
+  .sidebar-nav .count { font-size: 13px; color: var(--text-tertiary); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .sidebar-nav a.active .count { color: var(--text-secondary); }
+  .sidebar-area-label {
+    display: block; padding: 8px 24px; font-size: 14px;
+    font-weight: 500; color: var(--text-secondary);
+  }
+  .sidebar-area-label.active-area {
+    color: var(--text-primary);
+  }
+  .sidebar-spacer { flex: 1; }
+  .sidebar-footer { padding: 0 24px; font-size: 12px; color: var(--text-tertiary); }
+
+  .main { margin-left: var(--sidebar-width); flex: 1; min-height: 100vh; }
+  .content { max-width: 720px; margin: 0 auto; padding: 48px; }
+
+  .view-header { margin-bottom: 8px; }
+  .view-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+
+  /* ── Tag filter pills ── */
+  .tag-filters {
+    display: flex; align-items: center; gap: 8px; margin-top: 16px; flex-wrap: wrap;
+  }
+  .tag-pill {
+    padding: 4px 14px; font-family: inherit; font-size: 13px; font-weight: 500;
+    border-radius: 20px; border: none; cursor: pointer;
+    transition: background 100ms ease; background: var(--surface); color: var(--text-secondary);
+  }
+  .tag-pill:hover { background: var(--border); }
+  .tag-pill.active { background: var(--accent); color: #fff; }
+
+  /* ── Project cards in area view ── */
+  .project-list { margin-top: 24px; }
+
+  .project-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 8px;
+    margin: 0 -8px;
+    cursor: pointer;
+    transition: background 100ms ease;
+    border-radius: 6px;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .project-card + .project-card {
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+  }
+
+  .project-card:first-child { border-radius: 6px 6px 0 0; }
+  .project-card:last-child { border-radius: 0 0 6px 6px; }
+
+  .project-card:hover { background: var(--surface); }
+
+  .project-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .project-card-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .project-card-meta {
+    font-size: 13px;
+    color: var(--text-tertiary);
+  }
+
+  .project-card-count {
+    font-size: 14px;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    background: var(--surface);
+    padding: 2px 10px;
+    border-radius: 10px;
+  }
+
+  .project-card:hover .project-card-count {
+    background: var(--border);
+  }
+
+  /* ── Loose tasks section ── */
+  .section-title {
+    font-size: 13px; font-weight: 500; color: var(--text-secondary);
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    margin-top: 32px; margin-bottom: 0;
+  }
+
+  .task-item {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 12px 8px; cursor: pointer; transition: background 100ms ease;
+    margin: 0 -8px;
+  }
+  .task-item + .task-item { border-top: 1px solid var(--border); }
+  .task-item:hover { background: var(--surface); border-radius: 6px; }
+
+  .checkbox {
+    width: 18px; height: 18px; border: 1.5px solid var(--border);
+    border-radius: 50%; flex-shrink: 0; margin-top: 2px;
+    transition: border-color 150ms ease; cursor: pointer;
+  }
+  .checkbox:hover { border-color: var(--text-secondary); }
+
+  .task-content { flex: 1; min-width: 0; }
+  .task-title { font-size: 15px; font-weight: 400; letter-spacing: -0.005em; line-height: 1.4; }
+
+  .task-meta {
+    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+    font-size: 13px; color: var(--text-secondary); flex-wrap: wrap;
+  }
+  .task-meta .separator { color: var(--text-tertiary); font-size: 11px; }
+  .task-meta .tag {
+    display: inline-flex; padding: 1px 8px; background: var(--surface);
+    border-radius: 4px; font-size: 12px; color: var(--text-secondary);
+  }
+  .task-item:hover .task-meta .tag { background: var(--border); }
+</style>
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-brand"><h1>Ting</h1></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Views</div>
+      <ul class="sidebar-nav">
+        <li><a href="inbox.html">Inbox <span class="count">12</span></a></li>
+        <li><a href="today.html">Today <span class="count">5</span></a></li>
+        <li><a href="upcoming.html">Upcoming <span class="count">8</span></a></li>
+        <li><a href="anytime.html">Anytime <span class="count">28</span></a></li>
+        <li><a href="someday.html">Someday <span class="count">8</span></a></li>
+      </ul>
+    </div>
+    <div class="sidebar-lists" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+      <ul class="sidebar-nav">
+        <li><a href="#">Malta Holiday <span class="count">5</span></a></li>
+        <li><span class="sidebar-area-label active-area">Work</span></li>
+        <li><a href="project.html" style="padding-left: 40px;">Q2 planning <span class="count">7</span></a></li>
+        <li><a href="#" style="padding-left: 40px;">Kitchen renovation <span class="count">4</span></a></li>
+        <li><span class="sidebar-area-label">Personal</span></li>
+        <li><a href="#" style="padding-left: 40px;">Learn Danish <span class="count">3</span></a></li>
+        <li><a href="#" style="padding-left: 40px;">Health <span class="count">2</span></a></li>
+      </ul>
+    </div>
+    <div class="sidebar-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); margin-bottom: 0;">
+      <div class="sidebar-section-title">Tags</div>
+      <ul class="sidebar-nav">
+        <li><a href="#">urgent</a></li>
+        <li><a href="#">waiting</a></li>
+        <li><a href="#">errands</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer">Last synced 2 min ago</div>
+  </nav>
+
+  <main class="main">
+    <div class="content">
+      <div class="view-header">
+        <span class="view-title">Work</span>
+      </div>
+
+      <div class="tag-filters">
+        <button class="tag-pill active">All</button>
+        <button class="tag-pill">urgent</button>
+        <button class="tag-pill">waiting</button>
+        <button class="tag-pill">errands</button>
+      </div>
+
+      <!-- Projects in this area -->
+      <div class="project-list">
+        <a href="project.html" class="project-card">
+          <div class="project-card-info">
+            <span class="project-card-name">Q2 planning</span>
+            <span class="project-card-meta">5 remaining</span>
+          </div>
+          <span class="project-card-count">7</span>
+        </a>
+
+        <a href="#" class="project-card">
+          <div class="project-card-info">
+            <span class="project-card-name">Kitchen renovation</span>
+            <span class="project-card-meta">4 remaining</span>
+          </div>
+          <span class="project-card-count">4</span>
+        </a>
+      </div>
+
+      <!-- Loose tasks in this area (not in any project) -->
+      <div class="section-title">Tasks</div>
+
+      <div class="task-item">
+        <div class="checkbox"></div>
+        <div class="task-content">
+          <div class="task-title">Update team wiki with onboarding docs</div>
+        </div>
+      </div>
+
+      <div class="task-item">
+        <div class="checkbox"></div>
+        <div class="task-content">
+          <div class="task-title">Write post-mortem for March outage</div>
+          <div class="task-meta">
+            <span class="tag">urgent</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="task-item">
+        <div class="checkbox"></div>
+        <div class="task-content">
+          <div class="task-title">Set up monitoring dashboard for new service</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -9,7 +9,7 @@ Built on a reverse-engineered, unofficial SDK — there is no official API docum
 The server syncs your Things Cloud data into a local SQLite database and exposes it through two interfaces:
 
 - **MCP Endpoint** (`/mcp`) — [Model Context Protocol](https://modelcontextprotocol.io/) for AI assistants like Claude
-- **REST API** (`/api/*`) — Bearer token auth, for scripts and apps
+- **REST API** (`/api/*`) — JSON HTTP API for scripts and apps, with optional `API_KEY` auth
 
 Changes you make in the Things app show up immediately. Tasks Claude creates appear in Things within seconds. No restart required.
 The server performs an initial sync at startup and now exits if it cannot establish a clean local snapshot.
@@ -165,15 +165,31 @@ Your credentials are stored as encrypted secrets on your own Fly.io account — 
 
 Since this uses the Things Cloud sync protocol directly, consider creating a separate Things Cloud account to experiment with before pointing it at your main account.
 
+For a concrete `prod`/`dev` split with separate Fly apps, separate Things accounts, and separate Claude connectors, see **[docs/deployments.md](docs/deployments.md)**.
+
 ## Skills
 
 The MCP server gives Claude the ability to interact with Things, but to get the most out of it you need a **Claude Skill file** — a small instruction file that teaches Claude your specific projects, tags, and workflows.
 
 See **[docs/skills.md](docs/skills.md)** for a step-by-step guide to creating your own.
 
-## REST API
+## Auth
 
-All `/api/*` endpoints require `Authorization: Bearer <API_KEY>` when `API_KEY` is set.
+Current stable behavior is:
+
+- `/mcp` is open, which is why Claude.ai web and Claude Code can connect with just the MCP URL
+- `/api/*` can be optionally protected with `API_KEY`
+- if `API_KEY` is unset, the REST API is open too
+
+If you want static auth today, it applies only to the REST API:
+
+- set `API_KEY`
+- send `Authorization: Bearer <API_KEY>` on `/api/*`
+- leave your Claude connector pointed at the same unauthenticated `/mcp` URL
+
+`AUTH_SECRET` and OAuth belong to the planned web UI and future MCP-hardening work, not the current stable server behavior.
+
+## REST API
 
 See **[docs/endpoints-and-things-cloud.md](docs/endpoints-and-things-cloud.md)** for how the REST and MCP surfaces sync from Things Cloud history, answer reads from the local SQLite mirror, and commit writes back to the cloud.
 
@@ -183,10 +199,13 @@ See **[docs/endpoints-and-things-cloud.md](docs/endpoints-and-things-cloud.md)**
 | `GET /api/verify` | Verify Things Cloud credentials |
 | `GET /api/sync` | Trigger sync, returns change count |
 | `GET /api/tasks/today` | Tasks scheduled for today. Optional query params: `limit`, `offset` |
+| `GET /api/tasks/{uuid}` | Get a single task. Includes `ChecklistCount` so clients can tell whether checklist items exist without a second call |
+| `GET /api/tasks/{uuid}/checklist` | Checklist items for a task |
 | `GET /api/tasks/inbox` | Tasks in the inbox. Optional query params: `limit`, `offset` |
 | `GET /api/tasks/anytime` | Tasks in Anytime. Optional query params: `limit`, `offset` |
 | `GET /api/tasks/someday` | Tasks in Someday. Optional query params: `limit`, `offset` |
 | `GET /api/tasks/upcoming` | Tasks in Upcoming. Optional query params: `limit`, `offset` |
+| `GET /api/widget/today` | Compact Today-view payload for widgets: `uuid`, `title`, `projectName`, `isCompleted`, optional `deadline` |
 | `GET /api/projects` | All projects. Optional query params: `limit`, `offset` |
 | `GET /api/areas` | All areas. Optional query params: `limit`, `offset` |
 | `GET /api/tags` | All tags. Optional query params: `limit`, `offset` |
@@ -194,6 +213,40 @@ See **[docs/endpoints-and-things-cloud.md](docs/endpoints-and-things-cloud.md)**
 | `POST /api/tasks/edit` | Edit a task |
 | `POST /api/tasks/complete` | Complete a task |
 | `POST /api/tasks/trash` | Trash a task |
+
+Example widget payload:
+
+```json
+[
+  {
+    "uuid": "CoLoz6a9eaMAj99FQ6guo9",
+    "title": "Sort out HBO Max and sky",
+    "projectName": "Home",
+    "isCompleted": false,
+    "deadline": "2026-04-13"
+  }
+]
+```
+
+Widget Today behavior:
+
+- returns a compact Today-view payload for widgets
+- returns tasks with deadlines due today or overdue first, oldest deadline first
+- then returns overdue open tasks, oldest scheduled date first
+- then returns tasks due today
+- excludes tasks under the `☀️ Routines` project, including tasks attached through headings/action groups
+
+Example task detail payload:
+
+```json
+{
+  "UUID": "3Di38TbaTAS5TbkCxwDLt4",
+  "Title": "Check driver door jamb label for EX30 colour code, then order Volvo touch-up pen",
+  "Note": "Small stone chip on the bumper...",
+  "TagIDs": ["5Gnvio1bSv9HwQmZMdvQpR", "RdixPEoCd2WD2V7DiaYi6g"],
+  "ChecklistCount": 2
+}
+```
 
 ## SDK
 
@@ -207,15 +260,17 @@ The underlying Go SDK can be used directly as a library. See **[docs/sdk.md](doc
 
 ## Testing
 
-113 integration tests across 5 test suites:
+Live integration coverage across 5 shell test suites:
 
 ```bash
-./tests/test-smoke.sh          # Core read/write workflow (11 checks)
-./tests/test-mcp.sh 010        # All MCP write tools (44 checks)
-./tests/test-mcp-read.sh       # All MCP read tools (29 checks)
-./tests/test-mcp-protocol.sh   # JSON-RPC handshake and error handling (11 checks)
-API_KEY=your-key ./tests/test-api.sh  # All REST endpoints (18 checks)
+./tests/test-smoke.sh
+./tests/test-mcp.sh 010
+./tests/test-mcp-read.sh
+./tests/test-mcp-protocol.sh
+./tests/test-api.sh https://things-cloud-mttsmth.fly.dev your-token
 ```
+
+The first four suites work against the current authless MCP setup. `test-api.sh` is specifically for deployments where you have set `API_KEY` on `/api/*`. For multi-environment testing, pass the base URL explicitly so you do not hit production by accident. See **[docs/deployments.md](docs/deployments.md)**.
 
 ## Local development
 

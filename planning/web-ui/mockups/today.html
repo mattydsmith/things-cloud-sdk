@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ting — Today</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #FAF9F7;
+    --surface: #F3F1ED;
+    --border: #E5E1DB;
+    --text-primary: #2C2C2C;
+    --text-secondary: #8A8580;
+    --text-tertiary: #B5B0A9;
+    --accent: #C4704B;
+    --accent-hover: #A85A38;
+    --success: #7A9B7A;
+    --danger: #C47070;
+    --sidebar-width: 240px;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Sidebar ── */
+
+  .sidebar {
+    width: var(--sidebar-width);
+    min-height: 100vh;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 32px 0;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+  }
+
+  .sidebar-brand {
+    padding: 0 24px;
+    margin-bottom: 40px;
+  }
+
+  .sidebar-brand h1 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .sidebar-section {
+    margin-bottom: 4px;
+  }
+
+  .sidebar-section-title {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    padding: 0 24px;
+    margin-bottom: 8px;
+  }
+
+  .sidebar-nav {
+    list-style: none;
+  }
+
+  .sidebar-nav li {
+    position: relative;
+  }
+
+  .sidebar-nav a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 24px;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: background 100ms ease, color 100ms ease;
+    cursor: pointer;
+  }
+
+  .sidebar-nav a:hover {
+    background: rgba(0, 0, 0, 0.03);
+    color: var(--text-primary);
+  }
+
+  .sidebar-nav a.active {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .sidebar-nav a.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+  }
+
+  .sidebar-nav .count {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sidebar-nav a.active .count {
+    color: var(--text-secondary);
+  }
+
+  .sidebar-area-label {
+    display: block;
+    padding: 8px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .sidebar-spacer {
+    flex: 1;
+  }
+
+  .sidebar-footer {
+    padding: 0 24px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+
+  /* ── Main Content ── */
+
+  .main {
+    margin-left: var(--sidebar-width);
+    flex: 1;
+    min-height: 100vh;
+  }
+
+  .content {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 48px;
+  }
+
+  .view-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .view-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .view-date {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+
+  .view-count {
+    font-size: 14px;
+    color: var(--text-tertiary);
+    margin-left: 12px;
+    font-weight: 400;
+  }
+
+  /* ── Task List ── */
+
+  .task-list {
+    list-style: none;
+    margin-top: 24px;
+  }
+
+  .task-group {
+    margin-bottom: 32px;
+  }
+
+  .task-group-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
+  }
+
+  .task-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 100ms ease;
+    margin: 0 -8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    border-radius: 6px;
+    border-bottom: none;
+  }
+
+  .task-item:not(:last-child) {
+    border-bottom: none;
+  }
+
+  .task-item + .task-item {
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+  }
+
+  .task-item:first-child {
+    border-radius: 6px 6px 0 0;
+  }
+
+  .task-item:last-child {
+    border-radius: 0 0 6px 6px;
+  }
+
+  .task-item:only-child {
+    border-radius: 6px;
+  }
+
+  .task-item:hover {
+    background: var(--surface);
+  }
+
+  /* ── Checkbox ── */
+
+  .checkbox {
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid var(--border);
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 2px;
+    transition: border-color 150ms ease, background 150ms ease;
+    position: relative;
+    cursor: pointer;
+  }
+
+  .checkbox:hover {
+    border-color: var(--text-secondary);
+  }
+
+  .task-item.completed .checkbox {
+    background: var(--success);
+    border-color: var(--success);
+  }
+
+  .task-item.completed .checkbox::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 5px;
+    width: 5px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+
+  /* ── Task Content ── */
+
+  .task-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .task-title {
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: -0.005em;
+    line-height: 1.4;
+    color: var(--text-primary);
+  }
+
+  .task-item.completed .task-title {
+    text-decoration: line-through;
+    color: var(--text-secondary);
+  }
+
+  .task-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+  }
+
+  .task-meta .separator {
+    color: var(--text-tertiary);
+    font-size: 11px;
+  }
+
+  .task-meta .project-name {
+    color: var(--text-secondary);
+  }
+
+  .task-meta .deadline {
+    color: var(--danger);
+  }
+
+  .task-meta .deadline.future {
+    color: var(--text-secondary);
+  }
+
+  .task-meta .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    background: var(--surface);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .task-item:hover .task-meta .tag {
+    background: var(--border);
+  }
+
+  /* ── New Task Button ── */
+
+  .new-task {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 8px;
+    margin: 0 -8px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 100ms ease;
+  }
+
+  .new-task:hover {
+    background: var(--surface);
+  }
+
+  .new-task-icon {
+    width: 18px;
+    height: 18px;
+    border: 1.5px dashed var(--text-tertiary);
+    border-radius: 50%;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .new-task-icon::before,
+  .new-task-icon::after {
+    content: '';
+    position: absolute;
+    background: var(--text-tertiary);
+    border-radius: 1px;
+  }
+
+  .new-task-icon::before {
+    width: 8px;
+    height: 1.5px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .new-task-icon::after {
+    width: 1.5px;
+    height: 8px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .new-task-label {
+    font-size: 14px;
+    color: var(--text-tertiary);
+  }
+
+  /* ── Tag Filter Pills ── */
+
+  .tag-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .tag-pill {
+    padding: 4px 14px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 20px;
+    border: none;
+    cursor: pointer;
+    transition: background 100ms ease, color 100ms ease;
+    background: var(--surface);
+    color: var(--text-secondary);
+  }
+
+  .tag-pill:hover {
+    background: var(--border);
+  }
+
+  .tag-pill.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* ── View Toggle ── */
+
+  .view-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .view-toggle {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 2px;
+  }
+
+  .view-toggle-btn {
+    padding: 5px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: none;
+    color: var(--text-tertiary);
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .view-toggle-btn.active {
+    background: var(--bg);
+    color: var(--text-primary);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  /* ── Detail Panel ── */
+
+  .detail-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+  }
+
+  .detail-overlay.open {
+    display: flex;
+  }
+
+  .detail-backdrop {
+    flex: 1;
+    cursor: pointer;
+  }
+
+  .detail-panel {
+    width: 480px;
+    background: var(--bg);
+    border-left: 1px solid var(--border);
+    padding: 40px 32px;
+    overflow-y: auto;
+    animation: slideIn 200ms ease-out;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  .detail-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    color: var(--text-tertiary);
+    font-size: 18px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 100ms ease, color 100ms ease;
+  }
+
+  .detail-close:hover {
+    background: var(--surface);
+    color: var(--text-primary);
+  }
+
+  .detail-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .detail-checkbox {
+    width: 20px;
+    height: 20px;
+    border: 1.5px solid var(--border);
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+    cursor: pointer;
+    transition: border-color 150ms ease;
+  }
+
+  .detail-checkbox:hover {
+    border-color: var(--text-secondary);
+  }
+
+  .detail-title {
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+    outline: none;
+    border: none;
+    width: 100%;
+    background: none;
+    color: var(--text-primary);
+    font-family: inherit;
+    resize: none;
+  }
+
+  .detail-notes {
+    margin-top: 0;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .detail-notes textarea {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: none;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-primary);
+    resize: none;
+    min-height: 60px;
+  }
+
+  .detail-notes textarea::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  /* ── Checklist in detail ── */
+
+  .detail-checklist {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .checklist-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+  }
+
+  .checklist-item .checkbox {
+    width: 16px;
+    height: 16px;
+    margin-top: 0;
+    border-color: var(--accent);
+  }
+
+  .checklist-item .checklist-text {
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+
+  .checklist-item.done .checkbox {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .checklist-item.done .checklist-text {
+    text-decoration: line-through;
+    color: var(--text-secondary);
+  }
+
+  .add-checklist-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 14px;
+  }
+
+  .add-checklist-item:hover {
+    color: var(--text-secondary);
+  }
+
+  /* ── Detail bottom bar ── */
+
+  .detail-bottom {
+    padding: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .detail-field {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .detail-field-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    width: 70px;
+    flex-shrink: 0;
+  }
+
+  .detail-field-value {
+    font-size: 14px;
+    color: var(--text-primary);
+    flex: 1;
+  }
+
+  /* ── Today toggle ── */
+
+  .today-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    background: none;
+    color: var(--text-tertiary);
+    transition: all 150ms ease;
+  }
+
+  .today-toggle:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-secondary);
+  }
+
+  .today-toggle.active {
+    background: #FEF3E2;
+    border-color: #F5C842;
+    color: #B8860B;
+  }
+
+  .today-toggle .star {
+    font-size: 14px;
+  }
+
+  /* ── Tag selector ── */
+
+  .tag-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tag-option {
+    padding: 3px 12px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    background: none;
+    color: var(--text-tertiary);
+    transition: all 100ms ease;
+  }
+
+  .tag-option:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-secondary);
+  }
+
+  .tag-option.selected {
+    background: var(--surface);
+    border-color: var(--text-secondary);
+    color: var(--text-primary);
+  }
+
+  /* ── Project selector ── */
+
+  .project-select {
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .project-select:hover {
+    border-color: var(--text-secondary);
+  }
+
+  /* ── Delete button ── */
+
+  .detail-spacer {
+    flex: 1;
+  }
+
+  .detail-delete {
+    padding: 16px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .delete-btn {
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--danger);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 100ms ease;
+  }
+
+  .delete-btn:hover {
+    background: #FDF2F2;
+    border-color: var(--danger);
+  }
+
+  /* ── Confirm dialog ── */
+
+  .confirm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: rgba(0,0,0,0.3);
+    align-items: center;
+    justify-content: center;
+  }
+
+  .confirm-overlay.open {
+    display: flex;
+  }
+
+  .confirm-dialog {
+    background: var(--bg);
+    border-radius: 12px;
+    padding: 32px;
+    max-width: 360px;
+    width: 100%;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+  }
+
+  .confirm-dialog h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .confirm-dialog p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+
+  .confirm-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .confirm-cancel {
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .confirm-delete {
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--danger);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+</style>
+</head>
+<body>
+
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Ting</h1>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Views</div>
+      <ul class="sidebar-nav">
+        <li><a href="inbox.html">Inbox <span class="count">12</span></a></li>
+        <li><a href="today.html" class="active">Today <span class="count">5</span></a></li>
+        <li><a href="upcoming.html">Upcoming <span class="count">8</span></a></li>
+        <li><a href="anytime.html">Anytime <span class="count">28</span></a></li>
+        <li><a href="someday.html">Someday <span class="count">8</span></a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-lists" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+      <ul class="sidebar-nav">
+        <li><a href="#">Malta Holiday <span class="count">5</span></a></li>
+        <li><a href="area.html" class="sidebar-area-label">Work</a></li>
+        <li><a href="project.html" style="padding-left: 40px;">Q2 planning <span class="count">7</span></a></li>
+        <li><a href="#" style="padding-left: 40px;">Kitchen renovation <span class="count">4</span></a></li>
+        <li><span class="sidebar-area-label">Personal</span></li>
+        <li><a href="#" style="padding-left: 40px;">Learn Danish <span class="count">3</span></a></li>
+        <li><a href="#" style="padding-left: 40px;">Health <span class="count">2</span></a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); margin-bottom: 0;">
+      <div class="sidebar-section-title">Tags</div>
+      <ul class="sidebar-nav">
+        <li><a href="#">urgent</a></li>
+        <li><a href="#">waiting</a></li>
+        <li><a href="#">errands</a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-footer">
+      Last synced 2 min ago
+    </div>
+  </nav>
+
+  <!-- ── Main Content ── -->
+  <main class="main">
+    <div class="content">
+      <div class="view-header">
+        <div>
+          <span class="view-title">Today</span>
+          <span class="view-count">5 tasks</span>
+        </div>
+        <div class="view-controls">
+          <span class="view-date">Saturday, March 28</span>
+          <div class="view-toggle">
+            <button class="view-toggle-btn active" onclick="setView('grouped')">Grouped</button>
+            <button class="view-toggle-btn" onclick="setView('flat')">Flat</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tag-filters">
+        <button class="tag-pill active">All</button>
+        <button class="tag-pill">urgent</button>
+        <button class="tag-pill">waiting</button>
+        <button class="tag-pill">errands</button>
+      </div>
+
+      <!-- Tasks grouped by project -->
+      <div class="task-list">
+        <div class="task-group">
+          <div class="task-group-title">Q2 planning</div>
+          <div class="task-item" onclick="openDetail()">
+            <div class="checkbox"></div>
+            <div class="task-content">
+              <div class="task-title">Review Q2 planning document</div>
+              <div class="task-meta">
+                <span class="deadline">Due today</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="task-group">
+          <div class="task-group-title">Kitchen renovation</div>
+          <div class="task-item">
+            <div class="checkbox"></div>
+            <div class="task-content">
+              <div class="task-title">Call electrician about kitchen lights</div>
+              <div class="task-meta">
+                <span class="tag">errands</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="task-group">
+          <div class="task-group-title">Work</div>
+          <div class="task-item">
+            <div class="checkbox"></div>
+            <div class="task-content">
+              <div class="task-title">Write weekly status update</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="task-group">
+          <div class="task-group-title">Health</div>
+          <div class="task-item completed">
+            <div class="checkbox"></div>
+            <div class="task-content">
+              <div class="task-title">Morning run — 5K</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="task-group">
+          <div class="task-group-title">Learn Danish</div>
+          <div class="task-item">
+            <div class="checkbox"></div>
+            <div class="task-content">
+              <div class="task-title">Practice Danish vocabulary — Chapter 4</div>
+              <div class="task-meta">
+                <span class="deadline future">Due Apr 2</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="new-task">
+          <div class="new-task-icon"></div>
+          <span class="new-task-label">New task</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── Detail Panel ── -->
+  <div class="detail-overlay" id="detailOverlay">
+    <div class="detail-backdrop" onclick="closeDetail()"></div>
+    <div class="detail-panel">
+      <button class="detail-close" onclick="closeDetail()">&times;</button>
+
+      <!-- Title with checkbox -->
+      <div class="detail-header">
+        <div class="detail-checkbox"></div>
+        <textarea class="detail-title" rows="1">Review Q2 planning document</textarea>
+      </div>
+
+      <!-- Notes -->
+      <div class="detail-notes">
+        <textarea placeholder="Notes" rows="3">Ensure budget allocations align with the revised targets from finance.
+
+Key sections to review:
+— Headcount projections
+— Marketing spend breakdown
+— Engineering infrastructure costs</textarea>
+      </div>
+
+      <!-- Checklist -->
+      <div class="detail-checklist">
+        <div class="checklist-item done">
+          <div class="checkbox"></div>
+          <span class="checklist-text">Read through budget summary</span>
+        </div>
+        <div class="checklist-item">
+          <div class="checkbox"></div>
+          <span class="checklist-text">Compare with Q1 actuals</span>
+        </div>
+        <div class="checklist-item">
+          <div class="checkbox"></div>
+          <span class="checklist-text">Add comments to shared doc</span>
+        </div>
+        <div class="add-checklist-item">+ Add item</div>
+      </div>
+
+      <!-- Fields -->
+      <div class="detail-bottom">
+        <div class="detail-field">
+          <span class="detail-field-label">Today</span>
+          <button class="today-toggle active" onclick="this.classList.toggle('active')">
+            <span class="star">&#9733;</span> Today
+          </button>
+        </div>
+
+        <div class="detail-field">
+          <span class="detail-field-label">Project</span>
+          <select class="project-select">
+            <option>Q2 planning</option>
+            <option>Kitchen renovation</option>
+            <option>Learn Danish</option>
+            <option>Health</option>
+            <option>Malta Holiday</option>
+            <option value="">No project</option>
+          </select>
+        </div>
+
+        <div class="detail-field">
+          <span class="detail-field-label">Tags</span>
+          <div class="tag-selector">
+            <button class="tag-option" onclick="this.classList.toggle('selected')">urgent</button>
+            <button class="tag-option" onclick="this.classList.toggle('selected')">waiting</button>
+            <button class="tag-option selected" onclick="this.classList.toggle('selected')">errands</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-spacer"></div>
+
+      <!-- Delete -->
+      <div class="detail-delete">
+        <button class="delete-btn" onclick="showConfirm()">Delete task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Confirm Dialog ── -->
+  <div class="confirm-overlay" id="confirmOverlay">
+    <div class="confirm-dialog">
+      <h3>Delete this task?</h3>
+      <p>This can't be undone. The task will be permanently removed.</p>
+      <div class="confirm-actions">
+        <button class="confirm-cancel" onclick="hideConfirm()">Cancel</button>
+        <button class="confirm-delete" onclick="hideConfirm(); closeDetail();">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openDetail() {
+      document.getElementById('detailOverlay').classList.add('open');
+    }
+    function closeDetail() {
+      document.getElementById('detailOverlay').classList.remove('open');
+    }
+    function showConfirm() {
+      document.getElementById('confirmOverlay').classList.add('open');
+    }
+    function hideConfirm() {
+      document.getElementById('confirmOverlay').classList.remove('open');
+    }
+    function setView(mode) {
+      document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { hideConfirm(); closeDetail(); }
+    });
+  </script>
+</body>
+</html>

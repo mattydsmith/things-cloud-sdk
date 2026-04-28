@@ -55,11 +55,17 @@ When prompted, choose a region close to you. The included `fly.toml` configures 
 fly secrets set THINGS_USERNAME='your-things-email' THINGS_PASSWORD='your-things-password'
 ```
 
-Optionally set an API key for the REST endpoints:
+Optional: set an API key if you want to protect `/api/*` for scripts or direct REST clients:
 
 ```bash
 fly secrets set API_KEY='your-chosen-api-key'
 ```
+
+Important:
+
+- Claude.ai web and Claude Code currently connect to `/mcp` with no auth
+- `API_KEY` affects only `/api/*` in the current stable server
+- `AUTH_SECRET` is part of the planned web UI work, not the current installation flow
 
 ### Deploy
 
@@ -82,10 +88,11 @@ curl https://your-app-name.fly.dev/
 
 1. Go to **Settings > Connectors > Add custom connector**
 2. Set the URL to `https://your-app-name.fly.dev/mcp`
-3. Leave authentication fields empty (the MCP endpoint has no auth)
-4. Save
+3. Save
 
 Then ask Claude: *"What's on my Things today?"*
+
+No auth field is required. The current stable MCP endpoint is open.
 
 ### Claude Code (CLI)
 
@@ -100,6 +107,17 @@ Add the server to your Claude Code MCP config (`~/.claude/mcp.json` or project-l
     }
   }
 }
+```
+
+No headers are needed for Claude Code either, because `/mcp` is currently open. If you want to script against `/api/*`, use `API_KEY` there instead.
+
+### Direct REST clients
+
+If you do set `API_KEY`, send it on `/api/*` like this:
+
+```bash
+curl https://your-app-name.fly.dev/api/verify \
+  -H "Authorization: Bearer your-api-key"
 ```
 
 ## 5. Available tools
@@ -123,7 +141,13 @@ Once connected, Claude has access to 36 tools:
 
 ## Privacy and credentials
 
-The server needs your Things Cloud email and password to sync your tasks. Since you're deploying this on your own Fly.io account, your credentials are stored as encrypted secrets on infrastructure you control — they're not shared with anyone. The MCP endpoint itself has no authentication, so consider that anyone with your server URL could access your tasks. If that's a concern, you can set an `API_KEY` and restrict access to the REST API.
+The server needs your Things Cloud email and password to sync your tasks. Since you're deploying this on your own Fly.io account, your credentials are stored as encrypted secrets on infrastructure you control — they're not shared with anyone.
+
+Today the stable behavior is simple:
+
+- `/mcp` is open for Claude.ai web and Claude Code
+- `/api/*` is open unless you set `API_KEY`
+- if you do set `API_KEY`, it protects only the REST API
 
 ## Cost
 
@@ -135,7 +159,7 @@ Fly.io doesn't bill you if your monthly usage is under $5. The server scales to 
 |----------|----------|-------------|
 | `THINGS_USERNAME` | Yes | Your Things account email |
 | `THINGS_PASSWORD` | Yes | Your Things account password |
-| `API_KEY` | No | Bearer token for REST API endpoints (`/api/*`). If unset, no auth required. |
+| `API_KEY` | No | Optional static bearer token for `/api/*`. It does not affect `/mcp` in the current stable server. |
 | `PORT` | No | Server port (default: `8080`) |
 | `DEBUG` | No | Set to `true` for verbose HTTP logging |
 
@@ -146,10 +170,38 @@ git pull
 fly deploy
 ```
 
+## Migrating Existing Deployments
+
+### If you previously tested MCP auth changes
+
+If you temporarily added `AUTH_SECRET` while testing an auth-hardened branch, remove it. The current stable server does not use `AUTH_SECRET`:
+
+```bash
+fly secrets unset AUTH_SECRET -a your-app-name
+```
+
+If you want the current fully open prod/dev behavior for both `/mcp` and `/api/*`, remove `API_KEY` too:
+
+```bash
+fly secrets unset API_KEY -a your-app-name
+```
+
+If Claude still shows the old connector error after rollback, delete the connector and add it again with just the MCP URL.
+
+### If you use REST scripts
+
+You can keep using static bearer auth on `/api/*`:
+
+- keep `API_KEY` set
+- send `Authorization: Bearer <token>`
+- leave your Claude connector unchanged, because `/mcp` stays open
+
 ## Troubleshooting
 
 **Server won't start:** Check your credentials with `fly logs`. The most common issue is incorrect Things Cloud credentials.
 
-**Sync errors:** The server retries sync automatically. If issues persist, check `fly logs` for details. You can trigger a manual sync via `curl https://your-app-name.fly.dev/api/sync` (requires `API_KEY` if set).
+**Claude connector says it can't reach the MCP server:** Use the plain MCP URL with no auth settings. If you previously edited the connector during auth testing, delete it and recreate it.
+
+**Sync errors:** The server retries sync automatically. If issues persist, check `fly logs` for details. You can trigger a manual sync via `curl https://your-app-name.fly.dev/api/sync`; if `API_KEY` is enabled, include `Authorization: Bearer <API_KEY>`.
 
 **Cold start latency:** The first request after idle may take a few seconds as Fly.io starts the machine and the server performs an initial sync. Subsequent requests are fast.

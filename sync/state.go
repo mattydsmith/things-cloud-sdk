@@ -52,7 +52,7 @@ func (st *State) Tag(uuid string) (*things.Tag, error) {
 
 // AllTasks returns all tasks matching the query options
 func (st *State) AllTasks(opts QueryOpts) ([]*things.Task, error) {
-	query := `SELECT uuid FROM tasks WHERE type = 0 AND deleted = 0`
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND deleted = 0 AND status != 2`
 	args := []any{}
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"
@@ -67,7 +67,7 @@ func (st *State) AllTasks(opts QueryOpts) ([]*things.Task, error) {
 
 // AllProjects returns all projects
 func (st *State) AllProjects(opts QueryOpts) ([]*things.Task, error) {
-	query := `SELECT uuid FROM tasks WHERE type = 1 AND deleted = 0`
+	query := `SELECT uuid FROM tasks WHERE type = 1 AND deleted = 0 AND status != 2`
 	args := []any{}
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"
@@ -144,7 +144,7 @@ func (st *State) AllTagsWithOpts(opts QueryOpts) ([]*things.Tag, error) {
 
 // TasksInInbox returns tasks in the Inbox
 func (st *State) TasksInInbox(opts QueryOpts) ([]*things.Task, error) {
-	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 0 AND deleted = 0`
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 0 AND deleted = 0 AND status != 2`
 	args := []any{}
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"
@@ -158,16 +158,18 @@ func (st *State) TasksInInbox(opts QueryOpts) ([]*things.Task, error) {
 }
 
 // TasksInToday returns tasks in the Today view. A task appears in Today when
-// schedule=1 (started/anytime) AND either sr (scheduled_date) or tir
-// (today_index_ref) falls on today's date.
+// it carries a today-index reference for the current day, or when an Anytime
+// or deferred task has a scheduled date on the current day. This matches
+// Things.app behaviour where deferred (schedule=2) tasks are promoted to
+// Today when their scheduled date arrives.
 func (st *State) TasksInToday(opts QueryOpts) ([]*things.Task, error) {
 	todayUnix, tomorrowUnix := currentUTCDayBounds()
 
-	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 1
+	query := `SELECT uuid FROM tasks WHERE type = 0
 		AND (
-			(scheduled_date >= ? AND scheduled_date < ?)
-			OR (today_index_ref >= ? AND today_index_ref < ?)
-		) AND deleted = 0`
+			(today_index_ref >= ? AND today_index_ref < ?)
+			OR (schedule IN (1, 2) AND scheduled_date >= ? AND scheduled_date < ?)
+		) AND deleted = 0 AND status != 2`
 	args := []any{todayUnix, tomorrowUnix, todayUnix, tomorrowUnix}
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"
@@ -198,7 +200,7 @@ func (st *State) TasksInAnytime(opts QueryOpts) ([]*things.Task, error) {
 		AND NOT (
 			(scheduled_date IS NOT NULL AND scheduled_date >= ? AND scheduled_date < ?)
 			OR (today_index_ref IS NOT NULL AND today_index_ref >= ? AND today_index_ref < ?)
-		) AND deleted = 0`
+		) AND deleted = 0 AND status != 2`
 	args := []any{todayUnix, tomorrowUnix, todayUnix, tomorrowUnix}
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"
@@ -212,16 +214,18 @@ func (st *State) TasksInAnytime(opts QueryOpts) ([]*things.Task, error) {
 }
 
 // TasksInSomeday returns tasks in the Someday view. A task appears in Someday
-// when schedule=2 and it is not classified into Upcoming at the current time.
+// when schedule=2 and it has no date set, or only past dates. Tasks with
+// today's date go to Today; tasks with future dates go to Upcoming. Day
+// boundaries are used (not the current timestamp) so the view is stable
+// throughout the day.
 func (st *State) TasksInSomeday(opts QueryOpts) ([]*things.Task, error) {
-	nowUnix := currentUTCUnix()
+	todayUnix, _ := currentUTCDayBounds()
 
 	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 2
-		AND NOT (
-			(scheduled_date IS NOT NULL AND scheduled_date > ?)
-			OR (today_index_ref IS NOT NULL AND today_index_ref > ?)
-		) AND deleted = 0`
-	args := []any{nowUnix, nowUnix}
+		AND (scheduled_date IS NULL OR scheduled_date < ?)
+		AND (today_index_ref IS NULL OR today_index_ref < ?)
+		AND deleted = 0 AND status != 2`
+	args := []any{todayUnix, todayUnix}
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"
 	}
@@ -235,16 +239,17 @@ func (st *State) TasksInSomeday(opts QueryOpts) ([]*things.Task, error) {
 
 // TasksInUpcoming returns tasks in the Upcoming view. A task appears in
 // Upcoming when schedule=2 and either sr (scheduled_date) or tir
-// (today_index_ref) is in the future.
+// (today_index_ref) is tomorrow or later. Uses day boundaries so the view
+// is stable throughout the day and doesn't overlap with Today.
 func (st *State) TasksInUpcoming(opts QueryOpts) ([]*things.Task, error) {
-	nowUnix := currentUTCUnix()
+	_, tomorrowUnix := currentUTCDayBounds()
 
 	query := `SELECT uuid FROM tasks WHERE type = 0 AND schedule = 2
 		AND (
-			(scheduled_date IS NOT NULL AND scheduled_date > ?)
-			OR (today_index_ref IS NOT NULL AND today_index_ref > ?)
-		) AND deleted = 0`
-	args := []any{nowUnix, nowUnix}
+			(scheduled_date IS NOT NULL AND scheduled_date >= ?)
+			OR (today_index_ref IS NOT NULL AND today_index_ref >= ?)
+		) AND deleted = 0 AND status != 2`
+	args := []any{tomorrowUnix, tomorrowUnix}
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"
 	}
@@ -258,7 +263,7 @@ func (st *State) TasksInUpcoming(opts QueryOpts) ([]*things.Task, error) {
 
 // TasksInProject returns tasks belonging to a project
 func (st *State) TasksInProject(projectUUID string, opts QueryOpts) ([]*things.Task, error) {
-	query := `SELECT uuid FROM tasks WHERE type = 0 AND project_uuid = ? AND deleted = 0`
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND project_uuid = ? AND deleted = 0 AND status != 2`
 	args := []any{projectUUID}
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"
@@ -282,7 +287,7 @@ func (st *State) TasksInProject(projectUUID string, opts QueryOpts) ([]*things.T
 
 // TasksInArea returns tasks belonging to an area
 func (st *State) TasksInArea(areaUUID string, opts QueryOpts) ([]*things.Task, error) {
-	query := `SELECT uuid FROM tasks WHERE type = 0 AND area_uuid = ? AND deleted = 0`
+	query := `SELECT uuid FROM tasks WHERE type = 0 AND area_uuid = ? AND deleted = 0 AND status != 2`
 	args := []any{areaUUID}
 	if !opts.IncludeCompleted {
 		query += " AND status != 3"

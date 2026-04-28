@@ -211,17 +211,17 @@ These tests verify all read-only MCP tools return valid responses. They don't cr
 
 ## 4. REST API Endpoints (`test-api.sh`)
 
-**Status: Implemented — 21/21 passing**
+**Status: Implemented — 21/21 passing on auth-enabled deployments**
 
-Tests the `/api/*` endpoints which require Bearer token auth. Pass API key as second arg or via `API_KEY` env var.
+Tests the `/api/*` endpoints in the mode where `API_KEY` is set. Pass the API key as the second arg or via `API_KEY` env var. This suite is not representative of the current prod/dev deployments, which are open by default.
 
 ### Health & Auth
 
 | # | Endpoint | Method | Check |
 |---|----------|--------|-------|
 | 1 | `GET /` | — | Returns `{"service":"things-cloud-api","status":"ok"}` |
-| 2 | `GET /api/verify` | No auth | Returns 401 |
-| 3 | `GET /api/verify` | With auth | Returns 200 with account info |
+| 2 | `GET /api/verify` | No auth, with `API_KEY` configured | Returns 401 |
+| 3 | `GET /api/verify` | With auth, with `API_KEY` configured | Returns 200 with account info |
 
 ### Read endpoints
 

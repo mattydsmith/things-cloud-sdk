@@ -270,59 +270,6 @@ func handleTags(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, tags)
 }
 
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		apiKey := os.Getenv("API_KEY")
-		if apiKey == "" {
-			next(w, r)
-			return
-		}
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer "+apiKey {
-			jsonError(w, "unauthorized", 401)
-			return
-		}
-		next(w, r)
-	}
-}
-
-func authHandlerMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiKey := os.Getenv("API_KEY")
-		if apiKey == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if r.Header.Get("Authorization") != "Bearer "+apiKey {
-			jsonError(w, "unauthorized", 401)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func debugAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if os.Getenv("DEBUG") != "true" {
-			jsonError(w, "not found", 404)
-			return
-		}
-
-		apiKey := os.Getenv("API_KEY")
-		if apiKey == "" {
-			jsonError(w, "debug endpoints require API_KEY", 503)
-			return
-		}
-
-		if r.Header.Get("Authorization") != "Bearer "+apiKey {
-			jsonError(w, "unauthorized", 401)
-			return
-		}
-
-		next(w, r)
-	}
-}
-
 func runInitialSync(s initialSyncer) error {
 	log.Println("Performing initial sync...")
 	changes, err := s.Sync()
@@ -370,69 +317,43 @@ func serveWithGracefulShutdown(ctx context.Context, srv shutdownServer, timeout 
 	return nil
 }
 
-func main() {
-	username := os.Getenv("THINGS_USERNAME")
-	password := os.Getenv("THINGS_PASSWORD")
-	if username == "" || password == "" {
-		log.Fatal("THINGS_USERNAME and THINGS_PASSWORD must be set")
-	}
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	client = things.New(things.APIEndpoint, username, password)
-	client.Debug = os.Getenv("DEBUG") == "true"
-
-	var err error
-	syncer, err = sync.Open("/data/things.db", client)
-	if err != nil {
-		log.Fatalf("failed to open sync database: %v", err)
-	}
-	defer syncer.Close()
-
-	if err := runInitialSync(syncer); err != nil {
-		log.Fatal(err)
-	}
-
-	// Get history for write operations
-	history, err = client.OwnHistory()
-	if err != nil {
-		log.Fatalf("failed to get history: %v", err)
-	}
-	if err := history.Sync(); err != nil {
-		log.Fatalf("failed to sync history: %v", err)
-	}
-	log.Println("History ready for writes")
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			jsonError(w, "not found", 404)
-			return
-		}
-		jsonResponse(w, map[string]string{"service": "things-cloud-api", "status": "ok"})
+func registerRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		handleRoot(w, r)
 	})
+	mux.HandleFunc("GET /api/health", handleHealth)
 
-	http.HandleFunc("/api/verify", authMiddleware(handleVerify))
-	http.HandleFunc("/api/sync", authMiddleware(handleSync))
-	http.HandleFunc("/api/tasks/inbox", authMiddleware(handleInbox))
-	http.HandleFunc("/api/tasks/today", authMiddleware(handleToday))
-	http.HandleFunc("/api/tasks/anytime", authMiddleware(handleAnytime))
-	http.HandleFunc("/api/tasks/someday", authMiddleware(handleSomeday))
-	http.HandleFunc("/api/tasks/upcoming", authMiddleware(handleUpcoming))
-	http.HandleFunc("/api/projects", authMiddleware(handleProjects))
-	http.HandleFunc("/api/areas", authMiddleware(handleAreas))
-	http.HandleFunc("/api/tags", authMiddleware(handleTags))
+	mux.HandleFunc("POST /api/auth/login", handleAuthLogin)
+	mux.HandleFunc("POST /api/auth/logout", handleAuthLogout)
+	mux.HandleFunc("GET /api/auth/session", handleAuthSession)
+	mux.HandleFunc("GET /api/verify", authMiddleware(handleVerify))
+	mux.HandleFunc("GET /api/sync", authMiddleware(handleSync))
+	mux.HandleFunc("GET /api/tasks/inbox", authMiddleware(handleInbox))
+	mux.HandleFunc("GET /api/tasks/today", authMiddleware(handleToday))
+	mux.HandleFunc("GET /api/tasks/anytime", authMiddleware(handleAnytime))
+	mux.HandleFunc("GET /api/tasks/someday", authMiddleware(handleSomeday))
+	mux.HandleFunc("GET /api/tasks/upcoming", authMiddleware(handleUpcoming))
+	mux.HandleFunc("GET /api/projects", authMiddleware(handleProjects))
+	mux.HandleFunc("GET /api/areas", authMiddleware(handleAreas))
+	mux.HandleFunc("GET /api/tags", authMiddleware(handleTags))
+	mux.HandleFunc("GET /api/projects/{uuid}/tasks", authMiddleware(handleProjectTasks))
+	mux.HandleFunc("GET /api/areas/{uuid}", authMiddleware(handleAreaByUUID))
+	mux.HandleFunc("GET /api/areas/{uuid}/tasks", authMiddleware(handleAreaTasks))
+	mux.HandleFunc("GET /api/tasks/{uuid}", authMiddleware(handleTaskByUUID))
+	mux.HandleFunc("GET /api/tasks/{uuid}/checklist", authMiddleware(handleTaskChecklist))
+	mux.HandleFunc("GET /api/widget/today", authMiddleware(handleWidgetToday))
+	mux.HandleFunc("PUT /briefing/daily/{date}", bearerOnlyAuthMiddleware(handlePutDailyBriefing))
+	mux.HandleFunc("PUT /briefing/weekly/{week}", bearerOnlyAuthMiddleware(handlePutWeeklyBriefing))
 
-	// Write endpoints
-	http.HandleFunc("/api/tasks/create", authMiddleware(handleCreateTask))
-	http.HandleFunc("/api/tasks/complete", authMiddleware(handleCompleteTask))
-	http.HandleFunc("/api/tasks/trash", authMiddleware(handleTrashTask))
-	http.HandleFunc("/api/tasks/edit", authMiddleware(handleEditTask))
+	mux.HandleFunc("POST /api/tasks/create", authMiddleware(handleCreateTask))
+	mux.HandleFunc("POST /api/tasks/complete", authMiddleware(handleCompleteTask))
+	mux.HandleFunc("POST /api/tasks/trash", authMiddleware(handleTrashTask))
+	mux.HandleFunc("POST /api/tasks/edit", authMiddleware(handleEditTask))
+	mux.HandleFunc("POST /api/tasks/move-to-today", authMiddleware(handleMoveTaskToToday))
+	mux.HandleFunc("POST /api/tasks/remove-from-today", authMiddleware(handleRemoveTaskFromToday))
+	mux.HandleFunc("POST /api/tasks/move-to-anytime", authMiddleware(handleMoveTaskToAnytime))
 
-	// Debug endpoint — dump raw write history items
-	http.HandleFunc("/api/debug/history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/debug/history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		items, err := history.RawItems()
 		if err != nil {
 			jsonError(w, err.Error(), 500)
@@ -442,8 +363,7 @@ func main() {
 		json.NewEncoder(w).Encode(items)
 	}))
 
-	// Debug endpoint — list all history keys (uses SDK method with auth)
-	http.HandleFunc("/api/debug/histories", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/debug/histories", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		histories, err := client.Histories()
 		if err != nil {
 			jsonError(w, fmt.Sprintf("list histories failed: %v", err), 500)
@@ -460,12 +380,7 @@ func main() {
 		})
 	}))
 
-	// Debug endpoint — delete the current history key (uses SDK method with auth)
-	http.HandleFunc("/api/debug/delete-history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			jsonError(w, "POST required", 405)
-			return
-		}
+	mux.HandleFunc("POST /api/debug/delete-history", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		keyToDelete := history.ID
 		var body struct {
 			Key string `json:"key"`
@@ -491,12 +406,7 @@ func main() {
 		})
 	}))
 
-	// Debug endpoint — delete account and recreate it
-	http.HandleFunc("/api/debug/nuke-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			jsonError(w, "POST required", 405)
-			return
-		}
+	mux.HandleFunc("POST /api/debug/nuke-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		email := client.EMail
 		password := os.Getenv("THINGS_PASSWORD")
 
@@ -522,12 +432,7 @@ func main() {
 		})
 	}))
 
-	// Debug endpoint — confirm account with email code
-	http.HandleFunc("/api/debug/confirm-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			jsonError(w, "POST required", 405)
-			return
-		}
+	mux.HandleFunc("POST /api/debug/confirm-account", debugAuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Code string `json:"code"`
 		}
@@ -556,12 +461,51 @@ func main() {
 		})
 	}))
 
-	// MCP endpoint (no bearer auth — claude.ai connectors use OAuth which we don't implement)
-	http.Handle("/mcp", newMCPHandler())
+	mux.Handle("/mcp", newMCPHandler())
+}
+
+func main() {
+	username := os.Getenv("THINGS_USERNAME")
+	password := os.Getenv("THINGS_PASSWORD")
+	if username == "" || password == "" {
+		log.Fatal("THINGS_USERNAME and THINGS_PASSWORD must be set")
+	}
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	client = things.New(things.APIEndpoint, username, password)
+	client.Debug = os.Getenv("DEBUG") == "true"
+
+	var err error
+	syncer, err = sync.Open(thingsDBPath, client)
+	if err != nil {
+		log.Fatalf("failed to open sync database: %v", err)
+	}
+	defer syncer.Close()
+
+	if err := runInitialSync(syncer); err != nil {
+		log.Fatal(err)
+	}
+
+	// Get history for write operations
+	history, err = client.OwnHistory()
+	if err != nil {
+		log.Fatalf("failed to get history: %v", err)
+	}
+	if err := history.Sync(); err != nil {
+		log.Fatalf("failed to sync history: %v", err)
+	}
+	log.Println("History ready for writes")
+
+	mux := http.NewServeMux()
+	registerRoutes(mux)
 
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	server := &http.Server{Addr: ":" + port}
+	server := &http.Server{Addr: ":" + port, Handler: mux}
 
 	// Start the things-plus forwarder if configured. Opt-in: if THINGS_PLUS_EVENTS_URL
 	// is unset, the SDK runs exactly as before.

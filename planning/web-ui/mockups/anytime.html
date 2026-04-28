@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ting — Anytime</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #FAF9F7;
+    --surface: #F3F1ED;
+    --border: #E5E1DB;
+    --text-primary: #2C2C2C;
+    --text-secondary: #8A8580;
+    --text-tertiary: #B5B0A9;
+    --accent: #C4704B;
+    --accent-hover: #A85A38;
+    --success: #7A9B7A;
+    --danger: #C47070;
+    --sidebar-width: 240px;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sidebar {
+    width: var(--sidebar-width);
+    min-height: 100vh;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 32px 0;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+  }
+  .sidebar-brand { padding: 0 24px; margin-bottom: 40px; }
+  .sidebar-brand h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  .sidebar-section { margin-bottom: 4px; }
+  .sidebar-section-title {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-tertiary);
+    padding: 0 24px; margin-bottom: 8px;
+  }
+  .sidebar-nav { list-style: none; }
+  .sidebar-nav li { position: relative; }
+  .sidebar-nav a {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 24px; font-size: 14px; font-weight: 400;
+    color: var(--text-secondary); text-decoration: none;
+    transition: background 100ms ease, color 100ms ease; cursor: pointer;
+  }
+  .sidebar-nav a:hover { background: rgba(0,0,0,0.03); color: var(--text-primary); }
+  .sidebar-nav a.active { color: var(--text-primary); font-weight: 500; }
+  .sidebar-nav a.active::before {
+    content: ''; position: absolute; left: 0; top: 4px; bottom: 4px;
+    width: 3px; background: var(--accent); border-radius: 0 2px 2px 0;
+  }
+  .sidebar-nav .count { font-size: 13px; color: var(--text-tertiary); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .sidebar-nav a.active .count { color: var(--text-secondary); }
+  .sidebar-area-label {
+    display: block; padding: 8px 24px; font-size: 14px;
+    font-weight: 500; color: var(--text-secondary);
+  }
+  .sidebar-spacer { flex: 1; }
+  .sidebar-footer { padding: 0 24px; font-size: 12px; color: var(--text-tertiary); }
+
+  .main { margin-left: var(--sidebar-width); flex: 1; min-height: 100vh; }
+  .content { max-width: 720px; margin: 0 auto; padding: 48px; }
+
+  .view-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .view-title { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  .view-count { font-size: 14px; color: var(--text-tertiary); margin-left: 12px; font-weight: 400; }
+  .view-subtitle { font-size: 14px; color: var(--text-tertiary); }
+
+  /* ── Area Groups ── */
+
+  .area-group { margin-bottom: 32px; }
+
+  .area-group-header {
+    font-size: 13px; font-weight: 500; color: var(--text-secondary);
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
+  }
+
+  .task-item {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 12px 8px; cursor: pointer; transition: background 100ms ease;
+    margin: 0 -8px;
+  }
+  .task-item + .task-item { border-top: 1px solid var(--border); }
+  .task-item:hover { background: var(--surface); border-radius: 6px; }
+
+  .checkbox {
+    width: 18px; height: 18px; border: 1.5px solid var(--border);
+    border-radius: 50%; flex-shrink: 0; margin-top: 2px;
+    transition: border-color 150ms ease; cursor: pointer;
+  }
+  .checkbox:hover { border-color: var(--text-secondary); }
+
+  .task-content { flex: 1; min-width: 0; }
+  .task-title { font-size: 15px; font-weight: 400; letter-spacing: -0.005em; line-height: 1.4; }
+
+  .task-meta {
+    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+    font-size: 13px; color: var(--text-secondary); flex-wrap: wrap;
+  }
+  .task-meta .separator { color: var(--text-tertiary); font-size: 11px; }
+  .task-meta .project-name { color: var(--text-secondary); }
+  .task-meta .deadline { color: var(--danger); }
+  .task-meta .deadline.future { color: var(--text-secondary); }
+  .task-meta .tag {
+    display: inline-flex; padding: 1px 8px; background: var(--surface);
+    border-radius: 4px; font-size: 12px; color: var(--text-secondary);
+  }
+  .task-item:hover .task-meta .tag { background: var(--border); }
+
+  .new-task {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 8px; margin: 0 -8px; cursor: pointer;
+    border-radius: 6px; transition: background 100ms ease;
+  }
+  .new-task:hover { background: var(--surface); }
+  .new-task-icon {
+    width: 18px; height: 18px; border: 1.5px dashed var(--text-tertiary);
+    border-radius: 50%; flex-shrink: 0; position: relative;
+  }
+  .new-task-icon::before, .new-task-icon::after {
+    content: ''; position: absolute; background: var(--text-tertiary); border-radius: 1px;
+  }
+  .new-task-icon::before { width: 8px; height: 1.5px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  .new-task-icon::after { width: 1.5px; height: 8px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  .new-task-label { font-size: 14px; color: var(--text-tertiary); }
+</style>
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-brand"><h1>Ting</h1></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Views</div>
+      <ul class="sidebar-nav">
+        <li><a href="inbox.html">Inbox <span class="count">12</span></a></li>
+        <li><a href="today.html">Today <span class="count">5</span></a></li>
+        <li><a href="upcoming.html">Upcoming <span class="count">8</span></a></li>
+        <li><a href="anytime.html" class="active">Anytime <span class="count">28</span></a></li>
+        <li><a href="someday.html">Someday <span class="count">8</span></a></li>
+      </ul>
+    </div>
+    <div class="sidebar-lists" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+      <ul class="sidebar-nav">
+        <li><a href="#">Malta Holiday <span class="count">5</span></a></li>
+        <li><a href="area.html" class="sidebar-area-label">Work</a></li>
+        <li><a href="project.html" style="padding-left: 40px;">Q2 planning <span class="count">7</span></a></li>
+        <li><a href="#" style="padding-left: 40px;">Kitchen renovation <span class="count">4</span></a></li>
+        <li><span class="sidebar-area-label">Personal</span></li>
+        <li><a href="#" style="padding-left: 40px;">Learn Danish <span class="count">3</span></a></li>
+        <li><a href="#" style="padding-left: 40px;">Health <span class="count">2</span></a></li>
+      </ul>
+    </div>
+    <div class="sidebar-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); margin-bottom: 0;">
+      <div class="sidebar-section-title">Tags</div>
+      <ul class="sidebar-nav">
+        <li><a href="#">urgent</a></li>
+        <li><a href="#">waiting</a></li>
+        <li><a href="#">errands</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer">Last synced 2 min ago</div>
+  </nav>
+
+  <main class="main">
+    <div class="content">
+      <div class="view-header">
+        <div>
+          <span class="view-title">Anytime</span>
+          <span class="view-count">28 tasks</span>
+        </div>
+      </div>
+      <p class="view-subtitle">Tasks you can work on whenever</p>
+
+      <!-- Work area -->
+      <div class="area-group" style="margin-top: 24px;">
+        <div class="area-group-header">Work</div>
+        <div class="task-item">
+          <div class="checkbox"></div>
+          <div class="task-content">
+            <div class="task-title">Update team wiki with onboarding docs</div>
+            <div class="task-meta">
+              <span class="project-name">Q2 planning</span>
+            </div>
+          </div>
+        </div>
+        <div class="task-item">
+          <div class="checkbox"></div>
+          <div class="task-content">
+            <div class="task-title">Review PR #847 — auth refactor</div>
+            <div class="task-meta">
+              <span class="deadline future">Due Apr 5</span>
+            </div>
+          </div>
+        </div>
+        <div class="task-item">
+          <div class="checkbox"></div>
+          <div class="task-content">
+            <div class="task-title">Write post-mortem for March outage</div>
+            <div class="task-meta">
+              <span class="project-name">Q2 planning</span>
+              <span class="separator">&middot;</span>
+              <span class="tag">urgent</span>
+            </div>
+          </div>
+        </div>
+        <div class="task-item">
+          <div class="checkbox"></div>
+          <div class="task-content">
+            <div class="task-title">Set up monitoring dashboard for new service</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Personal area -->
+      <div class="area-group">
+        <div class="area-group-header">Personal</div>
+        <div class="task-item">
+          <div class="checkbox"></div>
+          <div class="task-content">
+            <div class="task-title">Sort through winter clothes for donation</div>
+          </div>
+        </div>
+        <div class="task-item">
+          <div class="checkbox"></div>
+          <div class="task-content">
+            <div class="task-title">Scan and file tax documents</div>
+            <div class="task-meta">
+              <span class="deadline">Due Apr 1</span>
+            </div>
+          </div>
+        </div>
+        <div class="task-item">
+          <div class="checkbox"></div>
+          <div class="task-content">
+            <div class="task-title">Fix squeaky door hinge in bedroom</div>
+            <div class="task-meta">
+              <span class="tag">errands</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Health area -->
+      <div class="area-group">
+        <div class="area-group-header">Health</div>
+        <div class="task-item">
+          <div class="checkbox"></div>
+          <div class="task-content">
+            <div class="task-title">Research local yoga studios</div>
+          </div>
+        </div>
+        <div class="task-item">
+          <div class="checkbox"></div>
+          <div class="task-content">
+            <div class="task-title">Schedule annual physical</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="new-task">
+        <div class="new-task-icon"></div>
+        <span class="new-task-label">New task</span>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
