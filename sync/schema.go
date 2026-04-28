@@ -1,6 +1,6 @@
 package sync
 
-const schemaVersion = 4
+const schemaVersion = 5
 
 const schema = `
 -- Schema version tracking
@@ -81,6 +81,13 @@ CREATE TABLE IF NOT EXISTS area_tags (
     PRIMARY KEY (area_uuid, tag_uuid)
 );
 
+-- Forward state (singleton row, tracks change_log entries POSTed to things-plus)
+CREATE TABLE IF NOT EXISTS forward_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    forwarded_change_log_id INTEGER NOT NULL DEFAULT 0,
+    last_forward_at INTEGER
+);
+
 -- Change log
 CREATE TABLE IF NOT EXISTS change_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,6 +151,18 @@ DELETE FROM change_log;
 DELETE FROM sync_state;
 `
 
+// migration5 adds the forward_state singleton row used by the things-plus
+// forwarder to track which change_log entries have been POSTed to the events
+// store. Independent of sync_state (which tracks the inbound Things Cloud
+// cursor).
+const migration5 = `
+CREATE TABLE IF NOT EXISTS forward_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    forwarded_change_log_id INTEGER NOT NULL DEFAULT 0,
+    last_forward_at INTEGER
+);
+`
+
 func (s *Syncer) migrate() error {
 	// Check current version
 	var version int
@@ -175,6 +194,11 @@ func (s *Syncer) migrate() error {
 	}
 	if version < 4 {
 		if _, err := s.db.Exec(migration4); err != nil {
+			return err
+		}
+	}
+	if version < 5 {
+		if _, err := s.db.Exec(migration5); err != nil {
 			return err
 		}
 	}
