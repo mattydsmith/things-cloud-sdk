@@ -189,6 +189,31 @@ Debug state.Update() behavior for a specific task. Has hardcoded target UUID.
 debugupdate
 ```
 
+### cleanup-bad-tombstones
+
+Forensic recovery tool for the case where `Tombstone2` records have ended up
+in Things Cloud with malformed `dloid` fields (non-22-char UUIDs). Things
+desktop has been observed to crash during sync on those tombstones. Things
+Cloud is append-only, so this tool can't delete the bad records — it appends
+a new valid `Tombstone2` whose `dloid` targets each bad tombstone's own UUID,
+so clients that process the new tombstone end up with the bad one removed
+from their local state.
+
+```bash
+# Find bad-dloid tombstones in history (writes UUIDs to stdout)
+cleanup-bad-tombstones --history-id <id> --scan > bad.txt
+
+# Preview the cleanup
+cleanup-bad-tombstones --history-id <id> --list bad.txt --dry-run
+
+# Apply
+cleanup-bad-tombstones --history-id <id> --list bad.txt
+```
+
+Use `$THINGS_HISTORY_ID` instead of `--history-id` if you prefer. No
+`THINGS_PASSWORD` is needed — the items/commit endpoints authenticate by
+history ID alone.
+
 ---
 
 ## When to Use Which Tool
@@ -202,6 +227,7 @@ debugupdate
 | See recent activity | `recent` |
 | Investigate specific item history | `trace` |
 | Debug state aggregation | `statedebug`, `findtask` |
+| Mask bad-dloid tombstones causing app crashes | `cleanup-bad-tombstones` |
 
 ## Building
 
