@@ -208,6 +208,17 @@ func (s *Syncer) LastSyncedIndex() int {
 	return idx
 }
 
+// StoredHistoryID returns the history ID persisted from a previous successful
+// sync, or "" if none. Callers can use this to skip the password-protected
+// Verify endpoint and go straight to the items endpoint, which only requires
+// the history ID.
+func (s *Syncer) StoredHistoryID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	id, _, _ := s.readSyncer().getSyncState()
+	return id
+}
+
 // ChangesSince returns changes that occurred after the given timestamp
 func (s *Syncer) ChangesSince(timestamp time.Time) ([]Change, error) {
 	s.mu.RLock()

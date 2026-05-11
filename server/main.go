@@ -492,10 +492,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Get history for write operations
-	history, err = client.OwnHistory()
-	if err != nil {
-		log.Fatalf("failed to get history: %v", err)
+	// Get history for write operations. Prefer the cached history ID because
+	// the items/commit endpoints only need it — calling OwnHistory hits the
+	// password-protected /account endpoint, which can be rate-limited or
+	// otherwise unavailable while sync itself is fine.
+	if storedID := syncer.StoredHistoryID(); storedID != "" {
+		history = client.HistoryWithID(storedID)
+	} else {
+		history, err = client.OwnHistory()
+		if err != nil {
+			log.Fatalf("failed to get history: %v", err)
+		}
 	}
 	if err := history.Sync(); err != nil {
 		log.Fatalf("failed to sync history: %v", err)
