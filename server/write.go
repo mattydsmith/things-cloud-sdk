@@ -198,6 +198,11 @@ func generateUUID() string {
 	for i, j := 0, len(encoded)-1; i < j; i, j = i+1, j-1 {
 		encoded[i], encoded[j] = encoded[j], encoded[i]
 	}
+	// Things desktop rejects UUIDs that aren't exactly 22 chars; left-pad with
+	// the base58 zero ('1') when leading bytes encode to fewer than 22 chars.
+	for len(encoded) < 22 {
+		encoded = append([]byte{alphabet[0]}, encoded...)
+	}
 	return string(encoded)
 }
 
